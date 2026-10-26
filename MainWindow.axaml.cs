@@ -51,6 +51,7 @@ public partial class MainWindow : Window
         AddNav(nav, "Rendez-vous", async () => await ShowAppointmentsAsync());
         AddNav(nav, "Pharmacie / Stocks", async () => await ShowMedicinesAsync());
         AddNav(nav, "Facturation", async () => await ShowInvoicesAsync());
+        AddNav(nav, "Sauvegarde", async () => await ShowBackupAsync());
         nav.Children.Add(new Border { Height = 1, Background = Brush("#404040"), Margin = new Thickness(4, 18) });
         nav.Children.Add(new TextBlock
         {
@@ -265,6 +266,28 @@ public partial class MainWindow : Window
         await Refresh();
     }
 
+    private async Task ShowBackupAsync()
+    {
+        BeginPage("Sauvegarde locale", "Créez une copie de la base SQLite sur cet appareil. Cette copie n'est pas chiffrée.");
+        await _database.InitializeAsync();
+        var folder = new TextBlock { Text = "Les sauvegardes sont créées dans le dossier Documents/AfriHospital-Backups.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") };
+        var save = ActionButton("Créer une sauvegarde maintenant");
+        save.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            var path = await _database.CreateBackupAsync();
+            _content.Children.Add(Card(new TextBlock { Text = "Sauvegarde créée : " + path, TextWrapping = TextWrapping.Wrap, Foreground = Brush("#166534") }));
+            SetStatus("Sauvegarde créée. Protégez ce fichier contre tout accès non autorisé.");
+        });
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            Heading("Sauvegarde de la base de données"),
+            folder,
+            new Border { Background = Brush("#FFF7D6"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12),
+                Child = new TextBlock { Text = "Attention : la sauvegarde contient potentiellement des données sensibles et n'est pas chiffrée. Ne l'envoyez pas par courriel et ne l'utilisez pas avec de vrais dossiers médicaux avant mise en place du chiffrement et d'une politique de conservation.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } },
+            save
+        }}));
+    }
+
     private async Task ShowInvoicesAsync()
     {
         BeginPage("Facturation", "Suivi simple des factures. Les devises et règles fiscales doivent être configurées pour chaque pays.");
@@ -346,6 +369,23 @@ CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, actio
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync()) rows.Add(map(reader));
         return rows;
+    }
+
+    public async Task<string> CreateBackupAsync()
+    {
+        await InitializeAsync();
+        await using (var connection = new SqliteConnection(ConnectionString))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA wal_checkpoint(FULL);";
+            await command.ExecuteNonQueryAsync();
+        }
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AfriHospital-Backups");
+        Directory.CreateDirectory(folder);
+        var target = Path.Combine(folder, $"afrihospital-{DateTime.Now:yyyyMMdd-HHmmss}.db");
+        File.Copy(_path, target, overwrite: false);
+        return target;
     }
 
     public async Task<List<PatientRow>> SearchPatientsAsync(string search)
