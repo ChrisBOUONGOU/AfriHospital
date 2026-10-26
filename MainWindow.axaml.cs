@@ -342,8 +342,16 @@ public partial class MainWindow : Window
         var save = ActionButton("Enregistrer le patient");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
-            if (string.IsNullOrWhiteSpace(name.Text)) { SetStatus("Le nom du patient est obligatoire.", true); return; }
+            if (string.IsNullOrWhiteSpace(name.Text) || name.Text.Trim().Length > 150)
+            { SetStatus("Le nom est obligatoire et ne doit pas dépasser 150 caractères.", true); return; }
+            if (!string.IsNullOrWhiteSpace(phone.Text) && phone.Text.Trim().Length > 30)
+            { SetStatus("Le numéro de téléphone ne doit pas dépasser 30 caractères.", true); return; }
+            if (!string.IsNullOrWhiteSpace(birth.Text) &&
+                (!DateOnly.TryParseExact(birth.Text.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var birthDate) ||
+                 birthDate > DateOnly.FromDateTime(DateTime.Today)))
+            { SetStatus("Date de naissance invalide. Utilisez AAAA-MM-JJ et une date non future.", true); return; }
             await _database.SavePatientAsync(selectedId, name.Text.Trim(), phone.Text ?? "", birth.Text ?? "", gender.Text ?? "", notes.Text ?? "");
+            await _database.WriteAuditAsync(selectedId is null ? "PATIENT_CREATED" : "PATIENT_UPDATED", "patient");
             selectedId = null; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = "";
             await Refresh(); SetStatus("Patient enregistré dans la base locale.");
         });
@@ -372,7 +380,11 @@ public partial class MainWindow : Window
         {
             if (patients.SelectedItem is not PatientRow selectedPatient || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Sélectionnez un patient et indiquez la date.", true); return; }
             if (!DateTime.TryParseExact(date.Text.Trim(), new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd H:mm" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var scheduledAt)) { SetStatus("Date invalide. Format attendu : AAAA-MM-JJ HH:MM.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO appointments(patient_id, patient_name, scheduled_at, reason, status) VALUES($id,$p,$d,$r,'Planifié')", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", scheduledAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)), ("$r", reason.Text ?? ""));
+            var formattedDate = scheduledAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            if (await _database.ExistsAsync("SELECT EXISTS(SELECT 1 FROM appointments WHERE patient_id=$id AND scheduled_at=$d AND status <> 'Annulé')", ("$id", selectedPatient.Id), ("$d", formattedDate)))
+            { SetStatus("Ce patient possède déjà un rendez-vous à cette date et heure.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO appointments(patient_id, patient_name, scheduled_at, reason, status) VALUES($id,$p,$d,$r,'Planifié')", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", formattedDate), ("$r", reason.Text ?? ""));
+            await _database.WriteAuditAsync("APPOINTMENT_CREATED", "appointment");
             patients.SelectedItem = null; date.Text = reason.Text = ""; await Refresh(); SetStatus("Rendez-vous ajouté.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouveau rendez-vous"), patients, date, reason, save } }));
@@ -394,7 +406,10 @@ public partial class MainWindow : Window
         {
             if (patients.SelectedItem is not PatientRow selectedPatient || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Sélectionnez un patient et indiquez la date.", true); return; }
             if (!DateTime.TryParseExact(date.Text.Trim(), new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd H:mm" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var consultedAt)) { SetStatus("Date invalide. Format attendu : AAAA-MM-JJ HH:MM.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary) VALUES($id,$p,$d,$c,$s)", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", consultedAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)), ("$c", clinician.Text ?? ""), ("$s", summary.Text ?? ""));
+            if (string.IsNullOrWhiteSpace(clinician.Text) || string.IsNullOrWhiteSpace(summary.Text))
+            { SetStatus("Le professionnel de santé et le résumé sont obligatoires.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary) VALUES($id,$p,$d,$c,$s)", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", consultedAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)), ("$c", clinician.Text.Trim()), ("$s", summary.Text.Trim()));
+            await _database.WriteAuditAsync("CONSULTATION_CREATED", "consultation");
             patients.SelectedItem = null; date.Text = clinician.Text = summary.Text = ""; await Refresh(); SetStatus("Consultation enregistrée.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle consultation"), patients, date, clinician, summary, save } }));
@@ -414,7 +429,10 @@ public partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(name.Text) || !int.TryParse(quantity.Text, out var q) || !int.TryParse(threshold.Text, out var min) || !decimal.TryParse(price.Text, out var p) || q < 0 || min < 0 || p < 0)
             { SetStatus("Renseignez le nom, des quantités positives et un prix valide.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO medicines(name, quantity, unit, unit_price, min_quantity) VALUES($n,$q,$u,$p,$m)", ("$n", name.Text.Trim()), ("$q", q), ("$u", unit.Text ?? "unité"), ("$p", p), ("$m", min));
+            if (name.Text.Trim().Length > 150 || (unit.Text?.Trim().Length ?? 0) > 40)
+            { SetStatus("Le nom du médicament ou l'unité est trop long.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO medicines(name, quantity, unit, unit_price, min_quantity) VALUES($n,$q,$u,$p,$m)", ("$n", name.Text.Trim()), ("$q", q), ("$u", string.IsNullOrWhiteSpace(unit.Text) ? "unité" : unit.Text.Trim()), ("$p", p), ("$m", min));
+            await _database.WriteAuditAsync("MEDICINE_CREATED", "medicine");
             name.Text = quantity.Text = threshold.Text = unit.Text = price.Text = ""; await Refresh(); SetStatus("Médicament ajouté.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Ajouter un médicament"), name, quantity, threshold, unit, price, save } }));
@@ -483,7 +501,13 @@ public partial class MainWindow : Window
         {
             if (string.IsNullOrWhiteSpace(patient.Text) || !decimal.TryParse(amount.Text, out var a) || a < 0 || string.IsNullOrWhiteSpace(currency.Text))
             { SetStatus("Le patient, le montant positif et la devise sont obligatoires.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO invoices(patient_name, description, amount, currency, status) VALUES($p,$d,$a,$c,'À payer')", ("$p", patient.Text.Trim()), ("$d", description.Text ?? ""), ("$a", a), ("$c", currency.Text.Trim().ToUpperInvariant()));
+            var currencyCode = currency.Text.Trim().ToUpperInvariant();
+            if (currencyCode.Length != 3 || currencyCode.Any(ch => ch < 'A' || ch > 'Z'))
+            { SetStatus("La devise doit être un code de trois lettres, par exemple XOF, XAF ou CDF.", true); return; }
+            if (patient.Text.Trim().Length > 150 || (description.Text?.Length ?? 0) > 500)
+            { SetStatus("Le nom du patient ou la description est trop long.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO invoices(patient_name, description, amount, currency, status) VALUES($p,$d,$a,$c,'À payer')", ("$p", patient.Text.Trim()), ("$d", description.Text ?? ""), ("$a", a), ("$c", currencyCode));
+            await _database.WriteAuditAsync("INVOICE_CREATED", "invoice");
             patient.Text = description.Text = amount.Text = currency.Text = ""; await Refresh(); SetStatus("Facture créée.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle facture"), patient, description, amount, currency, save } }));
@@ -571,6 +595,21 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
         var command = connection.CreateCommand(); command.CommandText = sql;
         return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    public async Task<bool> ExistsAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        return Convert.ToInt64(await command.ExecuteScalarAsync()) != 0;
+    }
+
+    public async Task WriteAuditAsync(string action, string entity)
+    {
+        await ExecuteAsync("INSERT INTO audit_log(action, entity) VALUES($action, $entity)", ("$action", action), ("$entity", entity));
     }
 
     public async Task ExecuteAsync(string sql, params (string Name, object Value)[] parameters)
