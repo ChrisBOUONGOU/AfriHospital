@@ -536,11 +536,12 @@ public partial class MainWindow : Window
                 !decimal.TryParse(paymentAmount.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var paid) ||
                 paid <= 0 || paymentMethod.SelectedItem is not string method)
             { SetStatus("Sélectionnez une facture, un montant positif et un moyen de paiement.", true); return; }
-            await _database.RecordPaymentAsync(selected.Id, paid, method);
+            var paymentId = await _database.RecordPaymentAsync(selected.Id, paid, method);
+            var receiptPath = await _database.CreateReceiptAsync(paymentId);
             invoiceChoice.SelectedItem = null;
             paymentAmount.Text = "";
             await Refresh();
-            SetStatus("Paiement enregistré.");
+            SetStatus("Paiement enregistré. Reçu créé : " + receiptPath);
         });
 
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle facture"), patient, description, amount, currency, save } }));
@@ -652,7 +653,7 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         return invoices;
     }
 
-    public async Task RecordPaymentAsync(long invoiceId, decimal amount, string method)
+    public async Task<long> RecordPaymentAsync(long invoiceId, decimal amount, string method)
     {
         if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount), "Le paiement doit être positif.");
         if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("Le moyen de paiement est obligatoire.", nameof(method));
@@ -690,6 +691,13 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
             insert.Parameters.AddWithValue("$method", method.Trim());
             await insert.ExecuteNonQueryAsync();
         }
+        long paymentId;
+        await using (var lastId = connection.CreateCommand())
+        {
+            lastId.Transaction = transaction;
+            lastId.CommandText = "SELECT last_insert_rowid();";
+            paymentId = Convert.ToInt64(await lastId.ExecuteScalarAsync());
+        }
         var newStatus = alreadyPaid + amount >= total ? "Payée" : "Partiellement payée";
         await using (var update = connection.CreateCommand())
         {
@@ -706,6 +714,41 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
             await audit.ExecuteNonQueryAsync();
         }
         transaction.Commit();
+        return paymentId;
+    }
+
+    public async Task<string> CreateReceiptAsync(long paymentId)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT p.id, p.invoice_id, i.patient_name, i.description, p.amount, i.currency, p.method, p.paid_at
+            FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.id=$id;
+            """;
+        command.Parameters.AddWithValue("$id", paymentId);
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) throw new KeyNotFoundException("Paiement introuvable pour générer le reçu.");
+        var receipt = string.Join(Environment.NewLine, new[]
+        {
+            "AFRIHOSPITAL — REÇU DE PAIEMENT",
+            "================================",
+            $"Reçu n° : {reader.GetInt64(0)}",
+            $"Facture n° : {reader.GetInt64(1)}",
+            $"Patient : {reader.GetString(2)}",
+            $"Description : {reader.GetString(3)}",
+            $"Montant reçu : {reader.GetDecimal(4).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} {reader.GetString(5)}",
+            $"Moyen de paiement : {reader.GetString(6)}",
+            $"Date : {reader.GetString(7)}",
+            "",
+            "Document généré localement. Conservez-le de manière sécurisée."
+        });
+        await reader.DisposeAsync();
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AfriHospital-Receipts");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, $"receipt-{paymentId}-{DateTime.UtcNow:yyyyMMddHHmmss}.txt");
+        await File.WriteAllTextAsync(path, receipt, new System.Text.UTF8Encoding(false));
+        return path;
     }
 
     public async Task<bool> ExistsAsync(string sql, params (string Name, object Value)[] parameters)
