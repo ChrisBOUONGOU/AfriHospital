@@ -2,7 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 
-namespace AfriHospital
+namespace AfriHospital.src.Desktop
 {
     public partial class App : Application
     {

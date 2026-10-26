@@ -18,4 +18,23 @@
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>
     </PackageReference>
   </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="src\Api\Controllers\" />
+    <Folder Include="src\Api\Middleware\" />
+    <Folder Include="src\Application\DTOs\" />
+    <Folder Include="src\Application\Validators\" />
+    <Folder Include="src\Application\Services\" />
+    <Folder Include="src\Desktop\Assets\" />
+    <Folder Include="src\Desktop\ViewModels\" />
+    <Folder Include="src\Desktop\Views\" />
+    <Folder Include="src\Domain\Entities\" />
+    <Folder Include="src\Domain\Enums\" />
+    <Folder Include="src\Domain\Interfaces\" />
+    <Folder Include="src\Infrastructure\Security\" />
+    <Folder Include="src\Infrastructure\Repositories\" />
+    <Folder Include="src\Infrastructure\Persistence\" />
+    <Folder Include="test\IntergrationTests\" />
+    <Folder Include="test\UnitTests\" />
+  </ItemGroup>
 </Project>
