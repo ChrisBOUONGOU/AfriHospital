@@ -38,7 +38,8 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Ajouter des médicaments et quantités en stock.
 - [x] Afficher les alertes de stock faible sur le tableau de bord.
 - [x] Enregistrer les paiements partiels/complets, calculer le solde et mettre à jour le statut de facture.
-- [ ] Gérer les remboursements et générer des reçus.
+- [x] Générer un reçu texte local après l'enregistrement d'un paiement.
+- [ ] Gérer les remboursements et produire des reçus formatés.
 - [ ] Gérer les lots, numéros de lot, péremptions, fournisseurs et mouvements de stock.
 - [ ] Valider les règles fiscales et monétaires de chaque pays cible.
 
