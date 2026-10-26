@@ -62,7 +62,7 @@ public sealed class AuthenticationService(
     }
 
     public async Task<HospitalUser> CreateUserAsync(
-        string username, string password, string role, CancellationToken cancellationToken = default)
+        string username, string password, string role, CancellationToken cancellationToken = default, string? createdBy = null)
     {
         if (string.IsNullOrWhiteSpace(username))
             throw new ArgumentException("Le nom d'utilisateur est obligatoire.", nameof(username));
@@ -81,7 +81,7 @@ public sealed class AuthenticationService(
             IsActive = true
         };
         await users.AddAsync(user, cancellationToken);
-        await connectionFactory.WriteAuditAsync(user.Username, "USER_CREATED", "Hospital user account created with role " + user.Role + ".", cancellationToken);
+        await connectionFactory.WriteAuditAsync(createdBy ?? "system", "USER_CREATED", "Account " + user.Username + " created with role " + user.Role + ".", cancellationToken);
         return user;
     }
 }
