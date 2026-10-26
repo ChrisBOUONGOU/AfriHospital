@@ -27,6 +27,19 @@ public sealed class SqliteConnectionFactory
 
     public SqliteConnection CreateConnection() => new(_connectionString);
 
+    public async Task WriteAuditAsync(string actor, string action, string details, CancellationToken cancellationToken = default)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "INSERT INTO security_audit_log(actor, action, details, created_at_utc) VALUES($actor, $action, $details, $created);";
+        command.Parameters.AddWithValue("$actor", string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim());
+        command.Parameters.AddWithValue("$action", action);
+        command.Parameters.AddWithValue("$details", details);
+        command.Parameters.AddWithValue("$created", DateTime.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = CreateConnection();
@@ -56,6 +69,14 @@ public sealed class SqliteConnectionFactory
             );
             CREATE INDEX IF NOT EXISTS ix_domain_consultations_patient_date
                 ON domain_consultations(patient_id, consultation_date_utc);
+            CREATE TABLE IF NOT EXISTS security_audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                actor TEXT NOT NULL,
+                action TEXT NOT NULL,
+                details TEXT NOT NULL DEFAULT '',
+                created_at_utc TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_security_audit_log_date ON security_audit_log(created_at_utc);
             CREATE TABLE IF NOT EXISTS hospital_users (
                 id TEXT PRIMARY KEY NOT NULL,
                 username TEXT NOT NULL COLLATE NOCASE UNIQUE,
