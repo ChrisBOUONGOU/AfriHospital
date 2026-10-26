@@ -26,7 +26,9 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Enregistrer et consulter la liste des consultations.
 - [x] Créer et consulter les rendez-vous.
 - [x] Rendre les champs obligatoires minimaux.
-- [ ] Relier les rendez-vous et consultations à des identifiants de patients plutôt qu'à leur nom.
+- [x] Relier les nouveaux rendez-vous et consultations à un identifiant de patient sélectionné.
+- [x] Ajouter une migration SQLite compatible avec les bases existantes et rattacher automatiquement les anciens enregistrements lorsque le nom correspond exactement.
+- [x] Valider le format de date et d’heure à la création des rendez-vous et consultations.
 - [ ] Ajouter les statuts, la modification, l'annulation et les contrôles de conflits.
 - [ ] Faire valider les champs cliniques par des professionnels de santé.
 
