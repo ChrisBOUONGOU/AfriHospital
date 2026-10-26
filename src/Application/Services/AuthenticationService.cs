@@ -70,6 +70,11 @@ public sealed class AuthenticationService(
             throw new ArgumentException("Le mot de passe doit contenir au moins 12 caractères.", nameof(password));
         if (string.IsNullOrWhiteSpace(role))
             throw new ArgumentException("Le rôle est obligatoire.", nameof(role));
+        var allowedRoles = new[] { "Doctor", "Nurse", "Receptionist", "Pharmacist", "Billing" };
+        var normalizedRole = allowedRoles.FirstOrDefault(
+            allowed => allowed.Equals(role.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (normalizedRole is null)
+            throw new ArgumentException("Le rôle demandé n'est pas autorisé pour la création d'un compte standard.", nameof(role));
 
         await connectionFactory.InitializeAsync(cancellationToken);
         var user = new HospitalUser
@@ -77,7 +82,7 @@ public sealed class AuthenticationService(
             Id = Guid.NewGuid(),
             Username = username.Trim(),
             PasswordHash = passwordHasher.HashPassword(password),
-            Role = role.Trim(),
+            Role = normalizedRole,
             IsActive = true
         };
         await users.AddAsync(user, cancellationToken);
