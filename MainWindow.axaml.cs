@@ -424,9 +424,15 @@ public partial class MainWindow : Window
 
     private async Task ShowBackupAsync()
     {
-        BeginPage("Sauvegarde locale", "Créez une copie de la base SQLite sur cet appareil. Cette copie n'est pas chiffrée.");
+        if (!CanAccess("Sauvegarde"))
+        {
+            BeginPage("Accès refusé", "Seul un administrateur peut sauvegarder ou restaurer la base.");
+            return;
+        }
+
+        BeginPage("Sauvegarde locale", "Créez une copie ou restaurez une sauvegarde SQLite. Une sauvegarde contient des données sensibles.");
         await _database.InitializeAsync();
-        var folder = new TextBlock { Text = "Les sauvegardes sont créées dans le dossier Documents/AfriHospital-Backups.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") };
+        var folder = new TextBlock { Text = "Les sauvegardes sont créées dans Documents/AfriHospital-Backups.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") };
         var save = ActionButton("Créer une sauvegarde maintenant");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
@@ -434,13 +440,34 @@ public partial class MainWindow : Window
             _content.Children.Add(Card(new TextBlock { Text = "Sauvegarde créée : " + path, TextWrapping = TextWrapping.Wrap, Foreground = Brush("#166534") }));
             SetStatus("Sauvegarde créée. Protégez ce fichier contre tout accès non autorisé.");
         });
+
+        var restorePath = Field("Chemin complet vers un fichier de sauvegarde .db");
+        var restore = ActionButton("Valider et restaurer cette sauvegarde", false);
+        restore.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(restorePath.Text))
+            {
+                SetStatus("Indiquez le chemin du fichier de sauvegarde.", true);
+                return;
+            }
+            var safetyCopy = await _database.RestoreBackupAsync(restorePath.Text.Trim());
+            await ShowDashboardAsync();
+            SetStatus("Restauration terminée. Une copie de sécurité de l'ancienne base a été créée : " + safetyCopy);
+        });
+
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
         {
-            Heading("Sauvegarde de la base de données"),
+            Heading("Créer une sauvegarde"),
             folder,
             new Border { Background = Brush("#FFF7D6"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12),
-                Child = new TextBlock { Text = "Attention : la sauvegarde contient potentiellement des données sensibles et n'est pas chiffrée. Ne l'envoyez pas par courriel et ne l'utilisez pas avec de vrais dossiers médicaux avant mise en place du chiffrement et d'une politique de conservation.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } },
+                Child = new TextBlock { Text = "Les sauvegardes ne sont pas chiffrées. Ne les transmettez pas et n'utilisez pas de vrais dossiers médicaux avant la mise en place des protections nécessaires.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } },
             save
+        }}));
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            Heading("Restaurer une sauvegarde"),
+            new TextBlock { Text = "La base choisie sera vérifiée avant restauration. L'application créera d'abord une copie de sécurité de la base actuelle.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") },
+            restorePath, restore
         }}));
     }
 
@@ -579,6 +606,49 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         var target = Path.Combine(folder, $"afrihospital-{DateTime.Now:yyyyMMdd-HHmmss}.db");
         File.Copy(_path, target, overwrite: false);
         return target;
+    }
+
+    public async Task<string> RestoreBackupAsync(string sourcePath)
+    {
+        if (string.IsNullOrWhiteSpace(sourcePath))
+            throw new ArgumentException("Le chemin de sauvegarde est obligatoire.", nameof(sourcePath));
+        sourcePath = Path.GetFullPath(sourcePath);
+        if (!File.Exists(sourcePath))
+            throw new FileNotFoundException("Le fichier de sauvegarde est introuvable.", sourcePath);
+        if (string.Equals(sourcePath, Path.GetFullPath(_path), StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Choisissez un fichier de sauvegarde différent de la base active.");
+
+        var sourceBuilder = new SqliteConnectionStringBuilder
+        {
+            DataSource = sourcePath,
+            Mode = SqliteOpenMode.ReadOnly,
+            Pooling = false
+        };
+        await using (var source = new SqliteConnection(sourceBuilder.ToString()))
+        {
+            await source.OpenAsync();
+            await using var integrity = source.CreateCommand();
+            integrity.CommandText = "PRAGMA integrity_check;";
+            var result = Convert.ToString(await integrity.ExecuteScalarAsync());
+            if (!string.Equals(result, "ok", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("La sauvegarde SQLite est invalide ou endommagée.");
+
+            await using var tables = source.CreateCommand();
+            tables.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='patients';";
+            if (Convert.ToInt32(await tables.ExecuteScalarAsync()) != 1)
+                throw new InvalidDataException("Ce fichier ne contient pas le schéma AfriHospital attendu.");
+        }
+
+        var safetyCopy = await CreateBackupAsync();
+        foreach (var suffix in new[] { "-wal", "-shm" })
+        {
+            var sidecar = _path + suffix;
+            if (File.Exists(sidecar)) File.Delete(sidecar);
+        }
+        File.Copy(sourcePath, _path, overwrite: true);
+        _initialized = false;
+        await InitializeAsync();
+        return safetyCopy;
     }
 
     public async Task<List<PatientRow>> SearchPatientsAsync(string search)
