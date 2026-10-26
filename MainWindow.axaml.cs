@@ -155,6 +155,7 @@ public partial class MainWindow : Window
         AddProtectedNav(nav, "Rendez-vous", async () => await ShowAppointmentsAsync());
         AddProtectedNav(nav, "Pharmacie / Stocks", async () => await ShowMedicinesAsync());
         AddProtectedNav(nav, "Facturation", async () => await ShowInvoicesAsync());
+        if (CanAccess("Utilisateurs")) AddNav(nav, "Utilisateurs", async () => await ShowUsersAsync());
         if (CanAccess("Sauvegarde")) AddNav(nav, "Sauvegarde", async () => await ShowBackupAsync());
         var logout = new Button { Content = "Se déconnecter", HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.Transparent, Foreground = Brushes.White, Padding = new Thickness(12, 11), CornerRadius = new CornerRadius(7) };
         logout.Click += (_, _) => Logout();
@@ -241,6 +242,48 @@ public partial class MainWindow : Window
         Foreground = Brush("#171717"), FontWeight = FontWeight.SemiBold,
         CornerRadius = new CornerRadius(7)
     };
+
+    private async Task ShowUsersAsync()
+    {
+        if (!CanAccess("Utilisateurs"))
+        {
+            BeginPage("Accès refusé", "Seul un administrateur peut gérer les comptes utilisateurs.");
+            return;
+        }
+
+        BeginPage("Utilisateurs", "Création de comptes et attribution de rôles. Utilisez des comptes nominatifs et des mots de passe uniques.");
+        await _connectionFactory.InitializeAsync();
+        var username = Field("Nom d'utilisateur");
+        var password = new PasswordBox { Watermark = "Mot de passe (12 caractères minimum)", MinWidth = 260, Padding = new Thickness(10) };
+        var role = new ComboBox { MinWidth = 260, ItemsSource = new[] { "Doctor", "Nurse", "Receptionist", "Pharmacist", "Billing" }, SelectedIndex = 0 };
+        var list = new ListBox { MinHeight = 200 };
+        async Task Refresh()
+        {
+            var users = await _users.GetAllAsync();
+            list.ItemsSource = users.Select(u => $"{u.Username} · {u.Role} · {(u.IsActive ? "Actif" : "Désactivé")}").ToList();
+        }
+        var save = ActionButton("Créer le compte");
+        save.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(username.Text) || string.IsNullOrWhiteSpace(password.Password) || role.SelectedItem is not string selectedRole)
+            {
+                SetStatus("Renseignez le nom d'utilisateur, le mot de passe et le rôle.", true);
+                return;
+            }
+            await _authentication.CreateUserAsync(username.Text.Trim(), password.Password, selectedRole);
+            username.Text = "";
+            password.Password = "";
+            await Refresh();
+            SetStatus("Compte utilisateur créé.");
+        });
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            Heading("Créer un compte utilisateur"), username, password, role, save,
+            new TextBlock { Text = "Le mot de passe doit contenir au moins 12 caractères. Les comptes sont créés actifs.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#4B5563") }
+        }}));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Comptes enregistrés"), list } }));
+        await Refresh();
+    }
 
     private async Task ShowDashboardAsync()
     {
