@@ -491,16 +491,32 @@ public partial class MainWindow : Window
 
     private async Task ShowInvoicesAsync()
     {
-        BeginPage("Facturation", "Suivi simple des factures. Les devises et règles fiscales doivent être configurées pour chaque pays.");
+        BeginPage("Facturation", "Suivi simple des factures et enregistrement des paiements. Les règles fiscales doivent être configurées pour chaque pays.");
         await _database.InitializeAsync();
-        var patient = Field("Nom du patient"); var description = Field("Description"); var amount = Field("Montant"); var currency = Field("Devise (ex. XOF, XAF, CDF)");
-        var list = new ListBox { MinHeight = 240 };
-        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, patient_name, description, amount, currency, status FROM invoices ORDER BY id DESC", r => $"Facture #{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetDecimal(3):0.00} {r.GetString(4)} · {r.GetString(5)}");
+        var patient = Field("Nom du patient");
+        var description = Field("Description");
+        var amount = Field("Montant total");
+        var currency = Field("Devise (ex. XOF, XAF, CDF)");
+        var list = new ListBox { MinHeight = 220 };
+        var invoiceChoice = new ComboBox { MinWidth = 260, PlaceholderText = "Choisir une facture à régler" };
+        var paymentAmount = Field("Montant du paiement");
+        var paymentMethod = new ComboBox { MinWidth = 260, ItemsSource = new[] { "Espèces", "Carte", "Virement", "Mobile money" }, SelectedIndex = 0 };
+
+        async Task Refresh()
+        {
+            list.ItemsSource = await _database.GetRowsAsync(
+                "SELECT i.id, i.patient_name, i.description, i.amount, i.currency, i.status, COALESCE(SUM(p.amount),0) FROM invoices i LEFT JOIN payments p ON p.invoice_id=i.id GROUP BY i.id ORDER BY i.id DESC",
+                r => $"Facture #{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · Total {r.GetDecimal(3):0.00} {r.GetString(4)} · Payé {r.GetDecimal(6):0.00} · {r.GetString(5)}");
+            invoiceChoice.ItemsSource = await _database.GetInvoiceChoicesAsync();
+        }
+
         var save = ActionButton("Créer la facture");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
-            if (string.IsNullOrWhiteSpace(patient.Text) || !decimal.TryParse(amount.Text, out var a) || a < 0 || string.IsNullOrWhiteSpace(currency.Text))
-            { SetStatus("Le patient, le montant positif et la devise sont obligatoires.", true); return; }
+            if (string.IsNullOrWhiteSpace(patient.Text) ||
+                !decimal.TryParse(amount.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var a) ||
+                a <= 0 || string.IsNullOrWhiteSpace(currency.Text))
+            { SetStatus("Le patient, un montant positif et la devise sont obligatoires. Utilisez le point pour les décimales.", true); return; }
             var currencyCode = currency.Text.Trim().ToUpperInvariant();
             if (currencyCode.Length != 3 || currencyCode.Any(ch => ch < 'A' || ch > 'Z'))
             { SetStatus("La devise doit être un code de trois lettres, par exemple XOF, XAF ou CDF.", true); return; }
@@ -508,12 +524,31 @@ public partial class MainWindow : Window
             { SetStatus("Le nom du patient ou la description est trop long.", true); return; }
             await _database.ExecuteAsync("INSERT INTO invoices(patient_name, description, amount, currency, status) VALUES($p,$d,$a,$c,'À payer')", ("$p", patient.Text.Trim()), ("$d", description.Text ?? ""), ("$a", a), ("$c", currencyCode));
             await _database.WriteAuditAsync("INVOICE_CREATED", "invoice");
-            patient.Text = description.Text = amount.Text = currency.Text = ""; await Refresh(); SetStatus("Facture créée.");
+            patient.Text = description.Text = amount.Text = currency.Text = "";
+            await Refresh();
+            SetStatus("Facture créée.");
         });
+
+        var pay = ActionButton("Enregistrer le paiement", false);
+        pay.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (invoiceChoice.SelectedItem is not InvoiceChoice selected ||
+                !decimal.TryParse(paymentAmount.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var paid) ||
+                paid <= 0 || paymentMethod.SelectedItem is not string method)
+            { SetStatus("Sélectionnez une facture, un montant positif et un moyen de paiement.", true); return; }
+            await _database.RecordPaymentAsync(selected.Id, paid, method);
+            invoiceChoice.SelectedItem = null;
+            paymentAmount.Text = "";
+            await Refresh();
+            SetStatus("Paiement enregistré.");
+        });
+
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle facture"), patient, description, amount, currency, save } }));
-        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Factures"), list } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Enregistrer un paiement"), invoiceChoice, paymentAmount, paymentMethod, pay } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Factures et montants encaissés"), list } }));
         await Refresh();
     }
+
 }
 
 internal sealed class HospitalDatabase
@@ -536,6 +571,8 @@ CREATE TABLE IF NOT EXISTS appointments(id INTEGER PRIMARY KEY AUTOINCREMENT, pa
 CREATE TABLE IF NOT EXISTS consultations(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NULL REFERENCES patients(id), patient_name TEXT NOT NULL, consulted_at TEXT NOT NULL, clinician TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS medicines(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'unité', unit_price NUMERIC NOT NULL DEFAULT 0, min_quantity INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS invoices(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', amount NUMERIC NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'À payer', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL REFERENCES invoices(id), amount NUMERIC NOT NULL CHECK(amount > 0), method TEXT NOT NULL, paid_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS ix_payments_invoice ON payments(invoice_id);
 CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);";
         await command.ExecuteNonQueryAsync();
         await EnsureColumnAsync(connection, "appointments", "patient_id", "INTEGER NULL REFERENCES patients(id)");
@@ -595,6 +632,80 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
         var command = connection.CreateCommand(); command.CommandText = sql;
         return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    public async Task<List<InvoiceChoice>> GetInvoiceChoicesAsync()
+    {
+        var invoices = new List<InvoiceChoice>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT i.id, i.patient_name, i.description, i.amount, i.currency, COALESCE(SUM(p.amount), 0)
+            FROM invoices i LEFT JOIN payments p ON p.invoice_id=i.id
+            GROUP BY i.id HAVING i.amount > COALESCE(SUM(p.amount), 0)
+            ORDER BY i.id DESC;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            invoices.Add(new InvoiceChoice(reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetDecimal(3), reader.GetString(4), reader.GetDecimal(5)));
+        return invoices;
+    }
+
+    public async Task RecordPaymentAsync(long invoiceId, decimal amount, string method)
+    {
+        if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount), "Le paiement doit être positif.");
+        if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("Le moyen de paiement est obligatoire.", nameof(method));
+
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+        decimal total;
+        decimal alreadyPaid;
+        await using (var invoice = connection.CreateCommand())
+        {
+            invoice.Transaction = transaction;
+            invoice.CommandText = "SELECT amount FROM invoices WHERE id=$id;";
+            invoice.Parameters.AddWithValue("$id", invoiceId);
+            var result = await invoice.ExecuteScalarAsync();
+            if (result is null || result is DBNull) throw new KeyNotFoundException("Facture introuvable.");
+            total = Convert.ToDecimal(result, System.Globalization.CultureInfo.InvariantCulture);
+        }
+        await using (var sum = connection.CreateCommand())
+        {
+            sum.Transaction = transaction;
+            sum.CommandText = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE invoice_id=$id;";
+            sum.Parameters.AddWithValue("$id", invoiceId);
+            alreadyPaid = Convert.ToDecimal(await sum.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        if (amount > total - alreadyPaid)
+            throw new InvalidOperationException("Le paiement dépasse le solde restant de la facture.");
+
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = "INSERT INTO payments(invoice_id, amount, method) VALUES($id,$amount,$method);";
+            insert.Parameters.AddWithValue("$id", invoiceId);
+            insert.Parameters.AddWithValue("$amount", amount);
+            insert.Parameters.AddWithValue("$method", method.Trim());
+            await insert.ExecuteNonQueryAsync();
+        }
+        var newStatus = alreadyPaid + amount >= total ? "Payée" : "Partiellement payée";
+        await using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE invoices SET status=$status WHERE id=$id;";
+            update.Parameters.AddWithValue("$status", newStatus);
+            update.Parameters.AddWithValue("$id", invoiceId);
+            await update.ExecuteNonQueryAsync();
+        }
+        await using (var audit = connection.CreateCommand())
+        {
+            audit.Transaction = transaction;
+            audit.CommandText = "INSERT INTO audit_log(action, entity) VALUES('PAYMENT_RECORDED','invoice');";
+            await audit.ExecuteNonQueryAsync();
+        }
+        transaction.Commit();
     }
 
     public async Task<bool> ExistsAsync(string sql, params (string Name, object Value)[] parameters)
@@ -716,4 +827,9 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
 internal sealed record PatientRow(long Id, string Name, string Phone, string BirthDate, string Gender, string Notes)
 {
     public override string ToString() => $"#{Id} · {Name} · {Phone}";
+}
+
+internal sealed record InvoiceChoice(long Id, string PatientName, string Description, decimal Total, string Currency, decimal Paid)
+{
+    public override string ToString() => $"Facture #{Id} · {PatientName} · Solde {(Total - Paid):0.00} {Currency}";
 }
