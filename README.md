@@ -206,7 +206,8 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Relier les consultations et rendez-vous aux patients sélectionnés dans le schéma historique.
 - [x] Valider le format de date et d'heure des rendez-vous et consultations.
 - [ ] Compléter les validations métier des champs et des dates.
-- [ ] Ajouter et exécuter des tests automatisés.
+- [x] Ajouter et exécuter les premiers tests automatisés d'authentification.
+- [ ] Étendre la couverture aux modules métier.
 
 ### Phase 3 — Gestion hospitalière
 - [x] Créer et afficher des rendez-vous simples associés à un patient.
@@ -457,7 +458,8 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Link consultations and appointments to selected patients in the legacy schema.
 - [x] Validate appointment and consultation date/time formats.
 - [ ] Complete business validation for fields and dates.
-- [ ] Add and run automated tests.
+- [x] Add and run initial automated authentication tests.
+- [ ] Extend test coverage to business modules.
 
 ### Phase 3 — Hospital Management
 - [x] Create and display basic appointments linked to a patient.
@@ -490,7 +492,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Extend and test the audit log for all sensitive operations.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [ ] Confirm a successful build and test run on the latest commit.
+- [x] Confirm a successful build and automated test run in GitHub Actions (4 tests pass on the current code).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. The authentication layer and new entities are not yet connected to the main UI.
 
