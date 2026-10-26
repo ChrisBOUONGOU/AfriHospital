@@ -217,7 +217,8 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Ajouter les demandes d'analyses et les résultats de laboratoire.
 - [x] Créer et afficher des factures simples avec devise configurable.
 - [x] Enregistrer des paiements partiels ou complets et calculer le solde restant.
-- [ ] Ajouter les remboursements et reçus imprimables.
+- [x] Générer un reçu texte local après chaque paiement enregistré.
+- [ ] Ajouter les remboursements et des reçus imprimables.
 - [ ] Valider les règles fiscales et monétaires du pays cible.
 
 ### Phase 4 — Sécurité et déploiement
@@ -467,7 +468,8 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Add laboratory test requests and results.
 - [x] Create and display basic invoices with a configurable currency.
 - [x] Record partial/full payments and calculate outstanding balances.
-- [ ] Add refunds and printable receipts.
+- [x] Generate a local text receipt after each recorded payment.
+- [ ] Add refunds and printable/formatted receipts.
 - [ ] Validate tax and currency rules for the target country.
 
 ### Phase 4 — Security and Deployment
