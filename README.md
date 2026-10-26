@@ -146,6 +146,8 @@ Le fonctionnement hors ligne avec synchronisation entre plusieurs appareils néc
 
 Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
+Le dépôt utilise actuellement un seul fichier projet, AfriHospital.csproj ; aucune suite de tests automatisés n'a été vérifiée.
+
 ### 1. Cloner le dépôt
 
 ```bash
@@ -158,8 +160,8 @@ cd AfriHospital
 Depuis le répertoire contenant la solution :
 
 ```bash
-dotnet restore
-dotnet build
+dotnet restore AfriHospital.csproj
+dotnet build AfriHospital.csproj --configuration Release
 ```
 
 ### 3. Lancer l'application
@@ -167,14 +169,14 @@ dotnet build
 Si le projet contient déjà une application exécutable :
 
 ```bash
-dotnet run --project chemin/vers/AfriHospital.Desktop.csproj
+dotnet run --project AfriHospital.csproj
 ```
 
 Le chemin exact dépendra de l'organisation réelle du dépôt.
 
 ## 🔐 Sécurité et confidentialité
 
-La protection des données médicales est une priorité de conception.
+La protection des données médicales est une priorité de conception. Une fondation de hachage des mots de passe et un service d'authentification existent, mais ne sont pas encore connectés à l'interface : aucun écran de connexion ni contrôle d'accès n'est actuellement appliqué aux modules. La base contient également deux schémas SQLite distincts.
 
 Les mesures à prévoir comprennent :
 
@@ -191,32 +193,49 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 ## 🗺️ Feuille de route
 
 ### Phase 1 — Fondations
-- [ ] Structurer la solution .NET.
-- [ ] Créer l'interface principale Avalonia.
-- [ ] Mettre en place MVVM.
-- [ ] Configurer la persistance locale.
-- [ ] Définir les premières entités métier.
+- [ ] Structurer le code en projets .NET séparés (l'application utilise encore un seul projet).
+- [x] Créer l'interface principale Avalonia avec tableau de bord et menu des modules.
+- [ ] Mettre en place MVVM (la logique de l'interface reste principalement dans le code-behind).
+- [x] Configurer une persistance SQLite locale pour les modules actuellement disponibles.
+- [x] Définir les premières entités métier Patient, Consultation et HospitalUser.
+- [ ] Vérifier le build complet et le lancement de l'application.
 
 ### Phase 2 — Patients et consultations
-- [ ] Enregistrer et rechercher les patients.
-- [ ] Gérer les dossiers patients.
-- [ ] Enregistrer les consultations.
-- [ ] Ajouter les validations et les tests.
+- [x] Enregistrer, rechercher et modifier les dossiers patients de base.
+- [x] Enregistrer et afficher les consultations.
+- [x] Relier les consultations et rendez-vous aux patients sélectionnés dans le schéma historique.
+- [x] Valider le format de date et d'heure des rendez-vous et consultations.
+- [ ] Compléter les validations métier des champs et des dates.
+- [ ] Ajouter et exécuter des tests automatisés.
 
 ### Phase 3 — Gestion hospitalière
-- [ ] Ajouter les rendez-vous et admissions.
-- [ ] Développer l'hospitalisation.
-- [ ] Ajouter la pharmacie et les stocks.
-- [ ] Intégrer le laboratoire et la facturation.
+- [x] Créer et afficher des rendez-vous simples associés à un patient.
+- [ ] Ajouter les admissions, files d'attente et orientation vers les services.
+- [ ] Développer les admissions/sorties, séjours, chambres et lits.
+- [x] Ajouter un catalogue simple de médicaments, les quantités et les alertes de stock faible.
+- [ ] Ajouter les mouvements de stock, lots, fournisseurs et dates de péremption.
+- [ ] Ajouter les demandes d'analyses et les résultats de laboratoire.
+- [x] Créer et afficher des factures simples avec devise configurable.
+- [ ] Ajouter les paiements, remboursements, reçus et soldes restants.
+- [ ] Valider les règles fiscales et monétaires du pays cible.
 
 ### Phase 4 — Sécurité et déploiement
-- [ ] Mettre en place les rôles et permissions.
-- [ ] Développer l'API si nécessaire.
-- [ ] Intégrer PostgreSQL pour le mode multi-utilisateurs.
-- [ ] Tester les sauvegardes et la restauration.
-- [ ] Étudier la synchronisation hors ligne.
+- [x] Ajouter une fondation SQLite pour les nouvelles entités GUID et les comptes utilisateurs.
+- [x] Ajouter les interfaces de dépôt et dépôts SQLite pour les nouvelles entités.
+- [x] Ajouter le hachage PBKDF2-SHA256 et un service applicatif de vérification des identifiants.
+- [ ] Unifier les nouvelles tables domain_patients/domain_consultations avec les tables historiques utilisées par l'interface.
+- [ ] Brancher la connexion à l'interface et créer un parcours sécurisé de premier administrateur.
+- [ ] Appliquer et tester les rôles et permissions dans chaque module.
+- [ ] Ajouter l'API ASP.NET Core si le mode multi-postes est retenu.
+- [ ] Ajouter PostgreSQL pour le mode multi-utilisateurs si nécessaire.
+- [x] Ajouter une sauvegarde locale manuelle de la base SQLite historique.
+- [ ] Tester la restauration et automatiser les sauvegardes périodiques.
+- [ ] Chiffrer les données sensibles et les sauvegardes, sécuriser les secrets et les accès.
+- [ ] Ajouter un journal d'audit fiable pour les opérations sensibles.
+- [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
+- [ ] Confirmer un build réussi via GitHub Actions et ajouter des tests automatisés.
 
-Les cases doivent être cochées uniquement lorsque les fonctionnalités correspondantes sont développées et vérifiées.
+> Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. La couche d'authentification et les nouvelles entités ne sont pas encore reliées à l'interface principale.
 
 ## 🤝 Contribution
 
@@ -321,7 +340,7 @@ Built with **C#, .NET, and Avalonia UI**, the project aims to provide a cross-pl
 | XAML | User interface definitions |
 | MVVM | Separation of UI and presentation logic |
 | CommunityToolkit.Mvvm | MVVM development utilities |
-| Entity Framework Core | Data access |
+| Microsoft.Data.Sqlite | Direct SQLite data access (currently used) |
 | SQLite | Planned local storage |
 | PostgreSQL | Planned server database |
 | ASP.NET Core | API for multi-user deployments |
@@ -396,14 +415,14 @@ dotnet build
 If an executable application project already exists:
 
 ```bash
-dotnet run --project path/to/AfriHospital.Desktop.csproj
+dotnet run --project AfriHospital.csproj
 ```
 
 The exact path depends on the repository's actual structure.
 
 ## 🔐 Security and Privacy
 
-Protecting medical data is a core design priority.
+Protecting medical data is a core design priority. Password-hashing and authentication-service foundations exist, but are not yet connected to the UI: there is no login screen or access control currently enforced by the modules. The database also contains two separate SQLite schemas.
 
 Planned safeguards include:
 
@@ -420,32 +439,49 @@ AfriHospital must not be considered production-ready for clinical use until the 
 ## 🗺️ Roadmap
 
 ### Phase 1 — Foundations
-- [ ] Structure the .NET solution.
-- [ ] Create the main Avalonia interface.
-- [ ] Implement MVVM.
-- [ ] Configure local persistence.
-- [ ] Define the initial business entities.
+- [ ] Split the code into separate .NET projects (the application still uses a single project).
+- [x] Create the main Avalonia interface with a dashboard and module navigation.
+- [ ] Implement MVVM (UI logic is still mainly in code-behind).
+- [x] Configure local SQLite persistence for the currently available modules.
+- [x] Define the initial Patient, Consultation, and HospitalUser domain entities.
+- [ ] Verify a complete build and launch the application.
 
 ### Phase 2 — Patients and Consultations
-- [ ] Register and search for patients.
-- [ ] Manage patient records.
-- [ ] Record medical consultations.
-- [ ] Add validation and tests.
+- [x] Register, search, and edit basic patient records.
+- [x] Record and display consultations.
+- [x] Link consultations and appointments to selected patients in the legacy schema.
+- [x] Validate appointment and consultation date/time formats.
+- [ ] Complete business validation for fields and dates.
+- [ ] Add and run automated tests.
 
 ### Phase 3 — Hospital Management
-- [ ] Add appointments and admissions.
-- [ ] Implement hospitalization management.
-- [ ] Add pharmacy and inventory features.
-- [ ] Integrate laboratory and billing modules.
+- [x] Create and display basic appointments linked to a patient.
+- [ ] Add admissions, waiting lists, and routing to departments.
+- [ ] Implement inpatient admission/discharge, stays, rooms, and beds.
+- [x] Add a basic medication catalog, quantities, and low-stock alerts.
+- [ ] Add stock movements, batches, suppliers, and expiration dates.
+- [ ] Add laboratory test requests and results.
+- [x] Create and display basic invoices with a configurable currency.
+- [ ] Add payments, refunds, receipts, and outstanding balances.
+- [ ] Validate tax and currency rules for the target country.
 
 ### Phase 4 — Security and Deployment
-- [ ] Implement roles and permissions.
-- [ ] Develop the API if required.
-- [ ] Integrate PostgreSQL for multi-user operation.
-- [ ] Test backup and recovery procedures.
-- [ ] Evaluate offline synchronization.
+- [x] Add SQLite foundations for the new GUID entities and user accounts.
+- [x] Add repository interfaces and SQLite repositories for the new entities.
+- [x] Add PBKDF2-SHA256 password hashing and an application service for credential verification.
+- [ ] Unify the new domain_patients/domain_consultations tables with the legacy tables used by the UI.
+- [ ] Connect login to the UI and create a secure first-administrator setup flow.
+- [ ] Enforce and test roles and permissions in every module.
+- [ ] Add an ASP.NET Core API if multi-workstation operation is selected.
+- [ ] Add PostgreSQL for multi-user operation if needed.
+- [x] Add a manual local backup action for the legacy SQLite database.
+- [ ] Test restoration and automate periodic backups.
+- [ ] Encrypt sensitive data and backups, and secure secrets and access.
+- [ ] Add a reliable audit log for sensitive operations.
+- [ ] Test offline operation and multi-workstation synchronization.
+- [ ] Confirm a successful GitHub Actions build and add automated tests.
 
-Check items only after the corresponding features have been implemented and verified.
+> Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. The authentication layer and new entities are not yet connected to the main UI.
 
 ## 🤝 Contributing
 
