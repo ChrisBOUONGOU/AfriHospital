@@ -48,15 +48,19 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Ajouter les dépôts SQLite pour les nouvelles entités.
 - [x] Ajouter un hachage de mot de passe PBKDF2-SHA256 avec sel aléatoire et comparaison en temps constant.
 - [x] Ajouter un service applicatif de création de compte et de vérification des identifiants.
-- [ ] Relier progressivement l'interface Avalonia à ces nouveaux dépôts : l'interface actuelle utilise encore les anciennes tables. Les tables domain_patients/domain_consultations sont séparées des tables historiques patients/consultations.
-- [ ] Créer un parcours de première configuration sécurisé pour le compte administrateur.
-- [ ] Appliquer les rôles et autorisations à chaque module de l'interface.
+- [ ] Relier progressivement l'interface Avalonia aux dépôts métier GUID : l'interface actuelle utilise encore les anciennes tables. Les tables domain_patients/domain_consultations sont séparées des tables historiques patients/consultations.
+- [x] Créer un parcours de première configuration qui n'autorise le premier administrateur que si aucun compte n'existe.
+- [x] Ajouter un filtrage initial des menus selon le rôle.
+- [ ] Renforcer et tester les autorisations dans chaque module et dans la couche métier.
+- [x] Ajouter une page administrateur pour créer des comptes avec rôles prédéfinis.
 
 - [x] Ajouter une action de sauvegarde locale de la base SQLite.
-- [ ] Tester la restauration et automatiser les sauvegardes périodiques.
+- [x] Ajouter la restauration SQLite après vérification d'intégrité, avec copie de sécurité de la base active.
+- [ ] Tester la restauration sur plusieurs scénarios et automatiser les sauvegardes périodiques.
 - [ ] Mettre en place une authentification robuste et des rôles avec autorisations.
 - [ ] Chiffrer les données sensibles et les sauvegardes, sécuriser les secrets et les accès.
-- [ ] Ajouter un journal d'audit fiable pour les opérations sensibles.
+- [x] Journaliser les connexions réussies/échouées et la création de comptes.
+- [ ] Étendre le journal d'audit à toutes les opérations sensibles et tester son intégrité.
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
