@@ -38,4 +38,7 @@
     <Folder Include="test\IntergrationTests\" />
     <Folder Include="test\UnitTests\" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+  </ItemGroup>
 </Project>
