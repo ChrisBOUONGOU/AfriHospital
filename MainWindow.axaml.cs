@@ -42,8 +42,8 @@ public partial class MainWindow : Window
             await _connectionFactory.InitializeAsync();
             var firstSetup = await _authentication.CountUsersAsync() == 0;
             var username = new TextBox { Watermark = "Nom d'utilisateur", MinWidth = 280, Padding = new Thickness(10) };
-            var password = new PasswordBox { Watermark = "Mot de passe", MinWidth = 280, Padding = new Thickness(10) };
-            var confirmation = new PasswordBox { Watermark = "Confirmer le mot de passe", MinWidth = 280, Padding = new Thickness(10), IsVisible = firstSetup };
+            var password = new TextBox { Watermark = "Mot de passe", PasswordChar = '●', MinWidth = 280, Padding = new Thickness(10) };
+            var confirmation = new TextBox { Watermark = "Confirmer le mot de passe", PasswordChar = '●', MinWidth = 280, Padding = new Thickness(10), IsVisible = firstSetup };
             var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brush("#B91C1C") };
             var submit = ActionButton(firstSetup ? "Créer l'administrateur" : "Se connecter");
             var panel = new StackPanel { Spacing = 14, Width = 360, Children =
@@ -59,16 +59,16 @@ public partial class MainWindow : Window
                 {
                     if (firstSetup)
                     {
-                        if (password.Password != confirmation.Password)
+                        if (password.Text != confirmation.Text)
                         {
                             message.Text = "Les mots de passe ne correspondent pas.";
                             return;
                         }
-                        _currentUser = await _authentication.CreateInitialAdministratorAsync(username.Text ?? "", password.Password ?? "");
+                        _currentUser = await _authentication.CreateInitialAdministratorAsync(username.Text ?? "", password.Text ?? "");
                     }
                     else
                     {
-                        _currentUser = await _authentication.AuthenticateAsync(username.Text ?? "", password.Password ?? "");
+                        _currentUser = await _authentication.AuthenticateAsync(username.Text ?? "", password.Text ?? "");
                         if (_currentUser is null)
                         {
                             message.Text = "Identifiants incorrects ou compte désactivé.";
@@ -254,7 +254,7 @@ public partial class MainWindow : Window
         BeginPage("Utilisateurs", "Création de comptes et attribution de rôles. Utilisez des comptes nominatifs et des mots de passe uniques.");
         await _connectionFactory.InitializeAsync();
         var username = Field("Nom d'utilisateur");
-        var password = new PasswordBox { Watermark = "Mot de passe (12 caractères minimum)", MinWidth = 260, Padding = new Thickness(10) };
+        var password = new TextBox { Watermark = "Mot de passe (12 caractères minimum)", PasswordChar = '●', MinWidth = 260, Padding = new Thickness(10) };
         var role = new ComboBox { MinWidth = 260, ItemsSource = new[] { "Doctor", "Nurse", "Receptionist", "Pharmacist", "Billing" }, SelectedIndex = 0 };
         var list = new ListBox { MinHeight = 200 };
         async Task Refresh()
@@ -265,14 +265,14 @@ public partial class MainWindow : Window
         var save = ActionButton("Créer le compte");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
-            if (string.IsNullOrWhiteSpace(username.Text) || string.IsNullOrWhiteSpace(password.Password) || role.SelectedItem is not string selectedRole)
+            if (string.IsNullOrWhiteSpace(username.Text) || string.IsNullOrWhiteSpace(password.Text) || role.SelectedItem is not string selectedRole)
             {
                 SetStatus("Renseignez le nom d'utilisateur, le mot de passe et le rôle.", true);
                 return;
             }
-            await _authentication.CreateUserAsync(username.Text.Trim(), password.Password, selectedRole);
+            await _authentication.CreateUserAsync(username.Text.Trim(), password.Text, selectedRole);
             username.Text = "";
-            password.Password = "";
+            password.Text = "";
             await Refresh();
             SetStatus("Compte utilisateur créé.");
         });
