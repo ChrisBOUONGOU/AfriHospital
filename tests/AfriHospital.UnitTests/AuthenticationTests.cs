@@ -47,6 +47,15 @@ public sealed class AuthenticationTests : IDisposable
     }
 
     [Fact]
+    public async Task StandardUserCreation_CannotCreateAnotherAdministrator()
+    {
+        await _service.CreateInitialAdministratorAsync("admin", "Secure-Initial-Password-42");
+
+        await Assert.ThrowsAsync<ArgumentException>(
+            () => _service.CreateUserAsync("second-admin", "Another-Secure-Password-42", "Admin"));
+    }
+
+    [Fact]
     public async Task UserCreation_RejectsShortPasswords()
     {
         await Assert.ThrowsAsync<ArgumentException>(
