@@ -4,6 +4,11 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Microsoft.Data.Sqlite;
+using AfriHospital.src.Application.Services;
+using AfriHospital.src.Domain.Entities;
+using AfriHospital.src.Infrastructure.Persistence;
+using AfriHospital.src.Infrastructure.Repositories;
+using AfriHospital.src.Infrastructure.Security;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,6 +19,10 @@ namespace AfriHospital;
 public partial class MainWindow : Window
 {
     private readonly HospitalDatabase _database = new();
+    private readonly SqliteConnectionFactory _connectionFactory = new();
+    private readonly SqliteHospitalUserRepository _users;
+    private readonly AuthenticationService _authentication;
+    private HospitalUser? _currentUser;
     private readonly StackPanel _content = new() { Spacing = 16 };
     private readonly TextBlock _pageTitle = new() { FontSize = 28, FontWeight = FontWeight.Bold, Foreground = Brush("#171717") };
     private readonly TextBlock _status = new() { FontSize = 12, Foreground = Brush("#6B7280") };
@@ -21,8 +30,101 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
-        BuildShell();
-        _ = ShowDashboardAsync();
+        _users = new SqliteHospitalUserRepository(_connectionFactory);
+        _authentication = new AuthenticationService(_connectionFactory, _users, new PasswordHasher());
+        _ = ShowAuthenticationAsync();
+    }
+
+    private async Task ShowAuthenticationAsync()
+    {
+        try
+        {
+            await _connectionFactory.InitializeAsync();
+            var firstSetup = await _authentication.CountUsersAsync() == 0;
+            var username = new TextBox { Watermark = "Nom d'utilisateur", MinWidth = 280, Padding = new Thickness(10) };
+            var password = new PasswordBox { Watermark = "Mot de passe", MinWidth = 280, Padding = new Thickness(10) };
+            var confirmation = new PasswordBox { Watermark = "Confirmer le mot de passe", MinWidth = 280, Padding = new Thickness(10), IsVisible = firstSetup };
+            var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brush("#B91C1C") };
+            var submit = ActionButton(firstSetup ? "Créer l'administrateur" : "Se connecter");
+            var panel = new StackPanel { Spacing = 14, Width = 360, Children =
+            {
+                new TextBlock { Text = "✚ AfriHospital", FontSize = 28, FontWeight = FontWeight.Bold, Foreground = Brush("#171717"), HorizontalAlignment = HorizontalAlignment.Center },
+                new TextBlock { Text = firstSetup ? "Première configuration — créez le compte administrateur." : "Connectez-vous pour accéder aux modules hospitaliers.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#4B5563") },
+                username, password, confirmation, submit, message
+            }};
+            submit.Click += async (_, _) =>
+            {
+                submit.IsEnabled = false;
+                try
+                {
+                    if (firstSetup)
+                    {
+                        if (password.Password != confirmation.Password)
+                        {
+                            message.Text = "Les mots de passe ne correspondent pas.";
+                            return;
+                        }
+                        _currentUser = await _authentication.CreateInitialAdministratorAsync(username.Text ?? "", password.Password ?? "");
+                    }
+                    else
+                    {
+                        _currentUser = await _authentication.AuthenticateAsync(username.Text ?? "", password.Password ?? "");
+                        if (_currentUser is null)
+                        {
+                            message.Text = "Identifiants incorrects ou compte désactivé.";
+                            return;
+                        }
+                    }
+                    BuildShell();
+                    await ShowDashboardAsync();
+                }
+                catch (Exception ex)
+                {
+                    message.Text = ex.Message;
+                }
+                finally { submit.IsEnabled = true; }
+            };
+
+            Content = new Grid
+            {
+                Background = Brush("#F3F4F6"),
+                Children =
+                {
+                    new Border { Background = Brushes.White, BorderBrush = Brush("#E5E7EB"), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(16), Padding = new Thickness(32), Width = 440, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Child = panel }
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            Content = new TextBlock { Text = "Impossible d'initialiser la connexion : " + ex.Message, Margin = new Thickness(24), TextWrapping = TextWrapping.Wrap };
+        }
+    }
+
+    private bool CanAccess(string module)
+    {
+        var role = _currentUser?.Role ?? "";
+        if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase)) return true;
+        return module switch
+        {
+            "Patients" => role.Equals("Receptionist", StringComparison.OrdinalIgnoreCase) || role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) || role.Equals("Nurse", StringComparison.OrdinalIgnoreCase),
+            "Consultations" => role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) || role.Equals("Nurse", StringComparison.OrdinalIgnoreCase),
+            "Rendez-vous" => role.Equals("Receptionist", StringComparison.OrdinalIgnoreCase) || role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) || role.Equals("Nurse", StringComparison.OrdinalIgnoreCase),
+            "Pharmacie / Stocks" => role.Equals("Pharmacist", StringComparison.OrdinalIgnoreCase),
+            "Facturation" => role.Equals("Billing", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    private void AddProtectedNav(StackPanel nav, string label, Func<Task> action)
+    {
+        if (CanAccess(label)) AddNav(nav, label, action);
+    }
+
+    private void Logout()
+    {
+        _currentUser = null;
+        _content.Children.Clear();
+        _ = ShowAuthenticationAsync();
     }
 
     private void BuildShell()
@@ -46,13 +148,16 @@ public partial class MainWindow : Window
                 new TextBlock { Text = "GESTION HOSPITALIÈRE", FontSize = 10, Margin = new Thickness(4, 6), Foreground = Brush("#D1D5DB") }
             }
         });
-        AddNav(nav, "Tableau de bord", async () => await ShowDashboardAsync());
-        AddNav(nav, "Patients", async () => await ShowPatientsAsync());
-        AddNav(nav, "Consultations", async () => await ShowConsultationsAsync());
-        AddNav(nav, "Rendez-vous", async () => await ShowAppointmentsAsync());
-        AddNav(nav, "Pharmacie / Stocks", async () => await ShowMedicinesAsync());
-        AddNav(nav, "Facturation", async () => await ShowInvoicesAsync());
-        AddNav(nav, "Sauvegarde", async () => await ShowBackupAsync());
+        if (CanAccess("Tableau de bord")) AddNav(nav, "Tableau de bord", async () => await ShowDashboardAsync());
+        AddProtectedNav(nav, "Patients", async () => await ShowPatientsAsync());
+        AddProtectedNav(nav, "Consultations", async () => await ShowConsultationsAsync());
+        AddProtectedNav(nav, "Rendez-vous", async () => await ShowAppointmentsAsync());
+        AddProtectedNav(nav, "Pharmacie / Stocks", async () => await ShowMedicinesAsync());
+        AddProtectedNav(nav, "Facturation", async () => await ShowInvoicesAsync());
+        if (CanAccess("Sauvegarde")) AddNav(nav, "Sauvegarde", async () => await ShowBackupAsync());
+        var logout = new Button { Content = "Se déconnecter", HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.Transparent, Foreground = Brushes.White, Padding = new Thickness(12, 11), CornerRadius = new CornerRadius(7) };
+        logout.Click += (_, _) => Logout();
+        nav.Children.Add(logout);
         nav.Children.Add(new Border { Height = 1, Background = Brush("#404040"), Margin = new Thickness(4, 18) });
         nav.Children.Add(new TextBlock
         {
