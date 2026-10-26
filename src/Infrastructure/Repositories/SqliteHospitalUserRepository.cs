@@ -25,7 +25,7 @@ public sealed class SqliteHospitalUserRepository(SqliteConnectionFactory factory
 
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        using var transaction = connection.BeginTransaction();
         await using (var count = connection.CreateCommand())
         {
             count.Transaction = transaction;
@@ -41,7 +41,7 @@ public sealed class SqliteHospitalUserRepository(SqliteConnectionFactory factory
             Bind(command, user);
             await command.ExecuteNonQueryAsync(cancellationToken);
         }
-        await transaction.CommitAsync(cancellationToken);
+        transaction.Commit();
     }
 
     public async Task<HospitalUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
