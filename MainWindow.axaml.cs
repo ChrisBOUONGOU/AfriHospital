@@ -104,6 +104,7 @@ public partial class MainWindow : Window
     {
         var role = _currentUser?.Role ?? "";
         if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase)) return true;
+        if (module.Equals("Tableau de bord", StringComparison.OrdinalIgnoreCase)) return _currentUser is not null;
         return module switch
         {
             "Patients" => role.Equals("Receptionist", StringComparison.OrdinalIgnoreCase) || role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) || role.Equals("Nurse", StringComparison.OrdinalIgnoreCase),
