@@ -1,12 +1,376 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Microsoft.Data.Sqlite;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading.Tasks;
 
-namespace AfriHospital
+namespace AfriHospital;
+
+public partial class MainWindow : Window
 {
-    public partial class MainWindow : Window
+    private readonly HospitalDatabase _database = new();
+    private readonly StackPanel _content = new() { Spacing = 16 };
+    private readonly TextBlock _pageTitle = new() { FontSize = 28, FontWeight = FontWeight.Bold, Foreground = Brush("#171717") };
+    private readonly TextBlock _status = new() { FontSize = 12, Foreground = Brush("#6B7280") };
+
+    public MainWindow()
     {
-        public MainWindow()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
+        BuildShell();
+        _ = ShowDashboardAsync();
     }
+
+    private void BuildShell()
+    {
+        var nav = new StackPanel { Spacing = 8, Width = 220, Background = Brush("#171717") };
+        nav.Children.Add(new StackPanel
+        {
+            Spacing = 2,
+            Margin = new Thickness(0, 0, 0, 18),
+            Children =
+            {
+                new Border
+                {
+                    Background = Brush("#A8E66B"), CornerRadius = new CornerRadius(10),
+                    Padding = new Thickness(12), Child = new TextBlock
+                    {
+                        Text = "✚  AfriHospital", FontSize = 20, FontWeight = FontWeight.Bold,
+                        Foreground = Brush("#171717")
+                    }
+                },
+                new TextBlock { Text = "GESTION HOSPITALIÈRE", FontSize = 10, Margin = new Thickness(4, 6), Foreground = Brush("#D1D5DB") }
+            }
+        });
+        AddNav(nav, "Tableau de bord", async () => await ShowDashboardAsync());
+        AddNav(nav, "Patients", async () => await ShowPatientsAsync());
+        AddNav(nav, "Consultations", async () => await ShowConsultationsAsync());
+        AddNav(nav, "Rendez-vous", async () => await ShowAppointmentsAsync());
+        AddNav(nav, "Pharmacie / Stocks", async () => await ShowMedicinesAsync());
+        AddNav(nav, "Facturation", async () => await ShowInvoicesAsync());
+        nav.Children.Add(new Border { Height = 1, Background = Brush("#404040"), Margin = new Thickness(4, 18) });
+        nav.Children.Add(new TextBlock
+        {
+            Text = "Prototype local\nDonnées enregistrées sur cet appareil",
+            Foreground = Brush("#D1D5DB"), FontSize = 11, Margin = new Thickness(8), TextWrapping = TextWrapping.Wrap
+        });
+
+        var right = new StackPanel { Spacing = 18, Margin = new Thickness(28) };
+        right.Children.Add(_pageTitle);
+        right.Children.Add(_status);
+        right.Children.Add(new Border { Height = 1, Background = Brush("#E5E7EB") });
+        right.Children.Add(_content);
+
+        var scroll = new ScrollViewer { Content = right, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var root = new Grid { ColumnDefinitions = new ColumnDefinitions("240,*") };
+        var navBorder = new Border { Padding = new Thickness(18), Background = Brush("#171717"), Child = nav };
+        Grid.SetColumn(navBorder, 0);
+        Grid.SetColumn(scroll, 1);
+        root.Children.Add(navBorder);
+        root.Children.Add(scroll);
+        Content = root;
+    }
+
+    private static IBrush Brush(string color) => new SolidColorBrush(Color.Parse(color));
+
+    private void AddNav(StackPanel nav, string label, Func<Task> action)
+    {
+        var button = new Button
+        {
+            Content = label, HorizontalContentAlignment = HorizontalAlignment.Left,
+            Background = Brushes.Transparent, Foreground = Brushes.White,
+            Padding = new Thickness(12, 11), CornerRadius = new CornerRadius(7)
+        };
+        button.Click += async (_, _) => await SafeRunAsync(action);
+        nav.Children.Add(button);
+    }
+
+    private async Task SafeRunAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception ex) { SetStatus("Erreur : " + ex.Message, true); }
+    }
+
+    private void BeginPage(string title, string description)
+    {
+        _pageTitle.Text = title;
+        _status.Text = description;
+        _content.Children.Clear();
+    }
+
+    private void SetStatus(string text, bool error = false)
+    {
+        _status.Text = text;
+        _status.Foreground = Brush(error ? "#B91C1C" : "#6B7280");
+    }
+
+    private Border Card(Control child) => new()
+    {
+        Background = Brushes.White, BorderBrush = Brush("#E5E7EB"),
+        BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(12),
+        Padding = new Thickness(18), Child = child
+    };
+
+    private TextBlock Heading(string text) => new()
+    {
+        Text = text, FontSize = 17, FontWeight = FontWeight.SemiBold,
+        Foreground = Brush("#171717")
+    };
+
+    private TextBox Field(string watermark) => new()
+    {
+        Watermark = watermark, MinWidth = 220, Padding = new Thickness(10),
+        HorizontalAlignment = HorizontalAlignment.Stretch
+    };
+
+    private Button ActionButton(string text, bool primary = true) => new()
+    {
+        Content = text, Padding = new Thickness(14, 10),
+        Background = Brush(primary ? "#A8E66B" : "#FFD43B"),
+        Foreground = Brush("#171717"), FontWeight = FontWeight.SemiBold,
+        CornerRadius = new CornerRadius(7)
+    };
+
+    private async Task ShowDashboardAsync()
+    {
+        BeginPage("Tableau de bord", "Vue d’ensemble — les données affichées proviennent de la base locale.");
+        await _database.InitializeAsync();
+        var counts = await _database.GetCountsAsync();
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 12, RowSpacing = 12 };
+        AddMetric(grid, "Patients", counts["patients"], 0, 0);
+        AddMetric(grid, "Consultations", counts["consultations"], 1, 0);
+        AddMetric(grid, "Rendez-vous", counts["appointments"], 2, 0);
+        AddMetric(grid, "Médicaments", counts["medicines"], 0, 1);
+        AddMetric(grid, "Factures", counts["invoices"], 1, 1);
+        AddMetric(grid, "Alertes stock", counts["low_stock"], 2, 1);
+        _content.Children.Add(Card(new StackPanel { Spacing = 8, Children =
+        {
+            new TextBlock { Text = "Bienvenue sur AfriHospital", FontSize = 22, FontWeight = FontWeight.Bold, Foreground = Brush("#17220F") },
+            new TextBlock { Text = "Gérez les informations administratives de votre établissement depuis une interface simple.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") },
+            new Border { Background = Brush("#FFF7D6"), CornerRadius = new CornerRadius(7), Padding = new Thickness(10),
+                Child = new TextBlock { Text = "Important : prototype non certifié. N’y saisissez pas de données médicales réelles avant validation de la sécurité et des sauvegardes.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } }
+        }}));
+        _content.Children.Add(grid);
+    }
+
+    private void AddMetric(Grid grid, string title, long value, int column, int row)
+    {
+        var card = Card(new StackPanel { Spacing = 8, Children =
+        {
+            new TextBlock { Text = title.ToUpperInvariant(), FontSize = 11, FontWeight = FontWeight.Bold, Foreground = Brush("#6B7280") },
+            new TextBlock { Text = value.ToString(), FontSize = 30, FontWeight = FontWeight.Bold, Foreground = Brush("#171717") }
+        }});
+        Grid.SetColumn(card, column); Grid.SetRow(card, row); grid.Children.Add(card);
+    }
+
+    private async Task ShowPatientsAsync()
+    {
+        BeginPage("Patients", "Créer, rechercher et modifier les dossiers administratifs de démonstration.");
+        await _database.InitializeAsync();
+        var name = Field("Nom complet *"); var phone = Field("Téléphone"); var birth = Field("Date de naissance (AAAA-MM-JJ)"); var gender = Field("Sexe (optionnel)"); var notes = Field("Notes administratives (optionnel)");
+        var search = Field("Rechercher par nom ou téléphone");
+        var selectedId = (long?)null;
+        var list = new ListBox { MinHeight = 220 };
+        async Task Refresh()
+        {
+            var rows = await _database.SearchPatientsAsync(search.Text ?? "");
+            list.ItemsSource = rows;
+        }
+        list.SelectionChanged += (_, _) =>
+        {
+            if (list.SelectedItem is PatientRow p)
+            {
+                selectedId = p.Id; name.Text = p.Name; phone.Text = p.Phone;
+                birth.Text = p.BirthDate; gender.Text = p.Gender; notes.Text = p.Notes;
+            }
+        };
+        search.TextChanged += async (_, _) => await SafeRunAsync(Refresh);
+        var save = ActionButton("Enregistrer le patient");
+        save.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(name.Text)) { SetStatus("Le nom du patient est obligatoire.", true); return; }
+            await _database.SavePatientAsync(selectedId, name.Text.Trim(), phone.Text ?? "", birth.Text ?? "", gender.Text ?? "", notes.Text ?? "");
+            selectedId = null; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = "";
+            await Refresh(); SetStatus("Patient enregistré dans la base locale.");
+        });
+        var clear = ActionButton("Nouveau / Effacer", false);
+        clear.Click += async (_, _) => { selectedId = null; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = ""; list.SelectedItem = null; await Task.CompletedTask; };
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            Heading("Fiche patient"), name, phone, birth, gender, notes,
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { save, clear } }
+        }}));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Dossiers enregistrés"), search, list } }));
+        await Refresh();
+    }
+
+    private async Task ShowAppointmentsAsync()
+    {
+        BeginPage("Rendez-vous", "Planification simple — dates et heures à saisir au format local.");
+        await _database.InitializeAsync();
+        var patient = Field("Nom du patient"); var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var reason = Field("Motif du rendez-vous");
+        var list = new ListBox { MinHeight = 240 };
+        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, patient_name, scheduled_at, reason, status FROM appointments ORDER BY scheduled_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} · {r.GetString(4)}");
+        var save = ActionButton("Ajouter le rendez-vous");
+        save.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(patient.Text) || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Le patient et la date sont obligatoires.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO appointments(patient_name, scheduled_at, reason, status) VALUES($p,$d,$r,'Planifié')", ("$p", patient.Text.Trim()), ("$d", date.Text.Trim()), ("$r", reason.Text ?? ""));
+            patient.Text = date.Text = reason.Text = ""; await Refresh(); SetStatus("Rendez-vous ajouté.");
+        });
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouveau rendez-vous"), patient, date, reason, save } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Rendez-vous enregistrés"), list } }));
+        await Refresh();
+    }
+
+    private async Task ShowConsultationsAsync()
+    {
+        BeginPage("Consultations", "Enregistrement administratif des consultations. Les décisions médicales doivent rester sous responsabilité d’un professionnel.");
+        await _database.InitializeAsync();
+        var patient = Field("Nom du patient"); var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var clinician = Field("Professionnel de santé"); var summary = Field("Résumé / motif de consultation");
+        var list = new ListBox { MinHeight = 220 };
+        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, patient_name, consulted_at, clinician, summary FROM consultations ORDER BY consulted_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} — {r.GetString(4)}");
+        var save = ActionButton("Enregistrer la consultation");
+        save.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(patient.Text) || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Le patient et la date sont obligatoires.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO consultations(patient_name, consulted_at, clinician, summary) VALUES($p,$d,$c,$s)", ("$p", patient.Text.Trim()), ("$d", date.Text.Trim()), ("$c", clinician.Text ?? ""), ("$s", summary.Text ?? ""));
+            patient.Text = date.Text = clinician.Text = summary.Text = ""; await Refresh(); SetStatus("Consultation enregistrée.");
+        });
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle consultation"), patient, date, clinician, summary, save } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Historique des consultations"), list } }));
+        await Refresh();
+    }
+
+    private async Task ShowMedicinesAsync()
+    {
+        BeginPage("Pharmacie et stocks", "Catalogue minimal et suivi des quantités. La gestion des lots, péremptions et dispensations devra être ajoutée avant utilisation réelle.");
+        await _database.InitializeAsync();
+        var name = Field("Nom du médicament"); var quantity = Field("Quantité en stock"); var threshold = Field("Seuil d’alerte"); var unit = Field("Unité (boîte, flacon…)"); var price = Field("Prix unitaire (nombre)");
+        var list = new ListBox { MinHeight = 240 };
+        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, name, quantity, unit, unit_price, min_quantity FROM medicines ORDER BY name", r => $"{r.GetString(1)} · stock {r.GetInt32(2)} {r.GetString(3)} · prix {r.GetDecimal(4):0.00} · seuil {r.GetInt32(5)}");
+        var save = ActionButton("Ajouter le médicament");
+        save.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(name.Text) || !int.TryParse(quantity.Text, out var q) || !int.TryParse(threshold.Text, out var min) || !decimal.TryParse(price.Text, out var p) || q < 0 || min < 0 || p < 0)
+            { SetStatus("Renseignez le nom, des quantités positives et un prix valide.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO medicines(name, quantity, unit, unit_price, min_quantity) VALUES($n,$q,$u,$p,$m)", ("$n", name.Text.Trim()), ("$q", q), ("$u", unit.Text ?? "unité"), ("$p", p), ("$m", min));
+            name.Text = quantity.Text = threshold.Text = unit.Text = price.Text = ""; await Refresh(); SetStatus("Médicament ajouté.");
+        });
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Ajouter un médicament"), name, quantity, threshold, unit, price, save } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Stock"), list } }));
+        await Refresh();
+    }
+
+    private async Task ShowInvoicesAsync()
+    {
+        BeginPage("Facturation", "Suivi simple des factures. Les devises et règles fiscales doivent être configurées pour chaque pays.");
+        await _database.InitializeAsync();
+        var patient = Field("Nom du patient"); var description = Field("Description"); var amount = Field("Montant"); var currency = Field("Devise (ex. XOF, XAF, CDF)");
+        var list = new ListBox { MinHeight = 240 };
+        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, patient_name, description, amount, currency, status FROM invoices ORDER BY id DESC", r => $"Facture #{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetDecimal(3):0.00} {r.GetString(4)} · {r.GetString(5)}");
+        var save = ActionButton("Créer la facture");
+        save.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(patient.Text) || !decimal.TryParse(amount.Text, out var a) || a < 0 || string.IsNullOrWhiteSpace(currency.Text))
+            { SetStatus("Le patient, le montant positif et la devise sont obligatoires.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO invoices(patient_name, description, amount, currency, status) VALUES($p,$d,$a,$c,'À payer')", ("$p", patient.Text.Trim()), ("$d", description.Text ?? ""), ("$a", a), ("$c", currency.Text.Trim().ToUpperInvariant()));
+            patient.Text = description.Text = amount.Text = currency.Text = ""; await Refresh(); SetStatus("Facture créée.");
+        });
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle facture"), patient, description, amount, currency, save } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Factures"), list } }));
+        await Refresh();
+    }
+}
+
+internal sealed class HospitalDatabase
+{
+    private readonly string _path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AfriHospital", "afrihospital.db");
+    private string ConnectionString => new SqliteConnectionStringBuilder { DataSource = _path, Mode = SqliteOpenMode.ReadWriteCreate }.ToString();
+    private bool _initialized;
+
+    public async Task InitializeAsync()
+    {
+        if (_initialized) return;
+        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        var command = connection.CreateCommand();
+        command.CommandText = @"
+PRAGMA foreign_keys = ON;
+CREATE TABLE IF NOT EXISTS patients(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', birth_date TEXT NOT NULL DEFAULT '', gender TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS appointments(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, scheduled_at TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Planifié', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS consultations(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, consulted_at TEXT NOT NULL, clinician TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS medicines(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'unité', unit_price NUMERIC NOT NULL DEFAULT 0, min_quantity INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS invoices(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', amount NUMERIC NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'À payer', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);";
+        await command.ExecuteNonQueryAsync();
+        _initialized = true;
+    }
+
+    public async Task<Dictionary<string,long>> GetCountsAsync()
+    {
+        var result = new Dictionary<string,long>();
+        result["patients"] = await ScalarAsync("SELECT COUNT(*) FROM patients");
+        result["consultations"] = await ScalarAsync("SELECT COUNT(*) FROM consultations");
+        result["appointments"] = await ScalarAsync("SELECT COUNT(*) FROM appointments");
+        result["medicines"] = await ScalarAsync("SELECT COUNT(*) FROM medicines");
+        result["invoices"] = await ScalarAsync("SELECT COUNT(*) FROM invoices");
+        result["low_stock"] = await ScalarAsync("SELECT COUNT(*) FROM medicines WHERE quantity <= min_quantity");
+        return result;
+    }
+
+    private async Task<long> ScalarAsync(string sql)
+    {
+        await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
+        var command = connection.CreateCommand(); command.CommandText = sql;
+        return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    public async Task ExecuteAsync(string sql, params (string Name, object Value)[] parameters)
+    {
+        await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
+        await using var command = connection.CreateCommand(); command.CommandText = sql;
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+        await command.ExecuteNonQueryAsync();
+    }
+
+    public async Task<List<string>> GetRowsAsync(string sql, Func<SqliteDataReader,string> map)
+    {
+        var rows = new List<string>();
+        await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
+        await using var command = connection.CreateCommand(); command.CommandText = sql;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync()) rows.Add(map(reader));
+        return rows;
+    }
+
+    public async Task<List<PatientRow>> SearchPatientsAsync(string search)
+    {
+        var rows = new List<PatientRow>();
+        await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id, name, phone, birth_date, gender, notes FROM patients WHERE name LIKE $q OR phone LIKE $q ORDER BY name";
+        command.Parameters.AddWithValue("$q", "%" + search + "%");
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            rows.Add(new PatientRow(reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5)));
+        return rows;
+    }
+
+    public async Task SavePatientAsync(long? id, string name, string phone, string birthDate, string gender, string notes)
+    {
+        if (id is null)
+            await ExecuteAsync("INSERT INTO patients(name, phone, birth_date, gender, notes) VALUES($n,$p,$b,$g,$notes)", ("$n", name), ("$p", phone), ("$b", birthDate), ("$g", gender), ("$notes", notes));
+        else
+            await ExecuteAsync("UPDATE patients SET name=$n, phone=$p, birth_date=$b, gender=$g, notes=$notes WHERE id=$id", ("$n", name), ("$p", phone), ("$b", birthDate), ("$g", gender), ("$notes", notes), ("$id", id.Value));
+    }
+}
+
+internal sealed record PatientRow(long Id, string Name, string Phone, string BirthDate, string Gender, string Notes)
+{
+    public override string ToString() => $"#{Id} · {Name} · {Phone}";
 }
