@@ -7,6 +7,43 @@ namespace AfriHospital.src.Infrastructure.Repositories;
 
 public sealed class SqliteHospitalUserRepository(SqliteConnectionFactory factory) : IHospitalUserRepository
 {
+    public async Task<int> CountAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM hospital_users;";
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken));
+    }
+
+    public async Task CreateInitialAdministratorAsync(HospitalUser user, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(user);
+        if (user.Id == Guid.Empty) user.Id = Guid.NewGuid();
+        user.Role = "Admin";
+        Validate(user);
+
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using (var count = connection.CreateCommand())
+        {
+            count.Transaction = transaction;
+            count.CommandText = "SELECT COUNT(*) FROM hospital_users;";
+            if (Convert.ToInt32(await count.ExecuteScalarAsync(cancellationToken)) != 0)
+                throw new InvalidOperationException("Le compte administrateur initial a déjà été créé.");
+        }
+
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = "INSERT INTO hospital_users(id, username, password_hash, role, is_active) VALUES($id,$username,$hash,'Admin',1);";
+            Bind(command, user);
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<HospitalUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(username)) return null;
