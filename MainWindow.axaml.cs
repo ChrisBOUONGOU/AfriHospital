@@ -213,17 +213,20 @@ public partial class MainWindow : Window
     {
         BeginPage("Rendez-vous", "Planification simple — dates et heures à saisir au format local.");
         await _database.InitializeAsync();
-        var patient = Field("Nom du patient"); var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var reason = Field("Motif du rendez-vous");
+        var patients = new ComboBox { MinWidth = 260, PlaceholderText = "Sélectionner un patient" };
+        patients.ItemsSource = await _database.GetPatientChoicesAsync();
+        var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var reason = Field("Motif du rendez-vous");
         var list = new ListBox { MinHeight = 240 };
-        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, patient_name, scheduled_at, reason, status FROM appointments ORDER BY scheduled_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} · {r.GetString(4)}");
+        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT a.id, COALESCE(p.name, a.patient_name), a.scheduled_at, a.reason, a.status FROM appointments a LEFT JOIN patients p ON p.id = a.patient_id ORDER BY a.scheduled_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} · {r.GetString(4)}");
         var save = ActionButton("Ajouter le rendez-vous");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
-            if (string.IsNullOrWhiteSpace(patient.Text) || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Le patient et la date sont obligatoires.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO appointments(patient_name, scheduled_at, reason, status) VALUES($p,$d,$r,'Planifié')", ("$p", patient.Text.Trim()), ("$d", date.Text.Trim()), ("$r", reason.Text ?? ""));
-            patient.Text = date.Text = reason.Text = ""; await Refresh(); SetStatus("Rendez-vous ajouté.");
+            if (patients.SelectedItem is not PatientRow selectedPatient || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Sélectionnez un patient et indiquez la date.", true); return; }
+            if (!DateTime.TryParseExact(date.Text.Trim(), new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd H:mm" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var scheduledAt)) { SetStatus("Date invalide. Format attendu : AAAA-MM-JJ HH:MM.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO appointments(patient_id, patient_name, scheduled_at, reason, status) VALUES($id,$p,$d,$r,'Planifié')", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", scheduledAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)), ("$r", reason.Text ?? ""));
+            patients.SelectedItem = null; date.Text = reason.Text = ""; await Refresh(); SetStatus("Rendez-vous ajouté.");
         });
-        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouveau rendez-vous"), patient, date, reason, save } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouveau rendez-vous"), patients, date, reason, save } }));
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Rendez-vous enregistrés"), list } }));
         await Refresh();
     }
@@ -232,17 +235,20 @@ public partial class MainWindow : Window
     {
         BeginPage("Consultations", "Enregistrement administratif des consultations. Les décisions médicales doivent rester sous responsabilité d’un professionnel.");
         await _database.InitializeAsync();
-        var patient = Field("Nom du patient"); var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var clinician = Field("Professionnel de santé"); var summary = Field("Résumé / motif de consultation");
+        var patients = new ComboBox { MinWidth = 260, PlaceholderText = "Sélectionner un patient" };
+        patients.ItemsSource = await _database.GetPatientChoicesAsync();
+        var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var clinician = Field("Professionnel de santé"); var summary = Field("Résumé / motif de consultation");
         var list = new ListBox { MinHeight = 220 };
-        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, patient_name, consulted_at, clinician, summary FROM consultations ORDER BY consulted_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} — {r.GetString(4)}");
+        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT c.id, COALESCE(p.name, c.patient_name), c.consulted_at, c.clinician, c.summary FROM consultations c LEFT JOIN patients p ON p.id = c.patient_id ORDER BY c.consulted_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} — {r.GetString(4)}");
         var save = ActionButton("Enregistrer la consultation");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
-            if (string.IsNullOrWhiteSpace(patient.Text) || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Le patient et la date sont obligatoires.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO consultations(patient_name, consulted_at, clinician, summary) VALUES($p,$d,$c,$s)", ("$p", patient.Text.Trim()), ("$d", date.Text.Trim()), ("$c", clinician.Text ?? ""), ("$s", summary.Text ?? ""));
-            patient.Text = date.Text = clinician.Text = summary.Text = ""; await Refresh(); SetStatus("Consultation enregistrée.");
+            if (patients.SelectedItem is not PatientRow selectedPatient || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Sélectionnez un patient et indiquez la date.", true); return; }
+            if (!DateTime.TryParseExact(date.Text.Trim(), new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd H:mm" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var consultedAt)) { SetStatus("Date invalide. Format attendu : AAAA-MM-JJ HH:MM.", true); return; }
+            await _database.ExecuteAsync("INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary) VALUES($id,$p,$d,$c,$s)", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", consultedAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)), ("$c", clinician.Text ?? ""), ("$s", summary.Text ?? ""));
+            patients.SelectedItem = null; date.Text = clinician.Text = summary.Text = ""; await Refresh(); SetStatus("Consultation enregistrée.");
         });
-        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle consultation"), patient, date, clinician, summary, save } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle consultation"), patients, date, clinician, summary, save } }));
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Historique des consultations"), list } }));
         await Refresh();
     }
@@ -326,13 +332,50 @@ internal sealed class HospitalDatabase
         command.CommandText = @"
 PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS patients(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, phone TEXT NOT NULL DEFAULT '', birth_date TEXT NOT NULL DEFAULT '', gender TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS appointments(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, scheduled_at TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Planifié', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS consultations(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, consulted_at TEXT NOT NULL, clinician TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS appointments(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NULL REFERENCES patients(id), patient_name TEXT NOT NULL, scheduled_at TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Planifié', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS consultations(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NULL REFERENCES patients(id), patient_name TEXT NOT NULL, consulted_at TEXT NOT NULL, clinician TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS medicines(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'unité', unit_price NUMERIC NOT NULL DEFAULT 0, min_quantity INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS invoices(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', amount NUMERIC NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'À payer', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);";
         await command.ExecuteNonQueryAsync();
+        await EnsureColumnAsync(connection, "appointments", "patient_id", "INTEGER NULL REFERENCES patients(id)");
+        await EnsureColumnAsync(connection, "consultations", "patient_id", "INTEGER NULL REFERENCES patients(id)");
+        await using (var migrate = connection.CreateCommand())
+        {
+            migrate.CommandText = @"UPDATE appointments SET patient_id = (SELECT p.id FROM patients p WHERE p.name = appointments.patient_name COLLATE NOCASE LIMIT 1) WHERE patient_id IS NULL;
+UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name = consultations.patient_name COLLATE NOCASE LIMIT 1) WHERE patient_id IS NULL;";
+            await migrate.ExecuteNonQueryAsync();
+        }
         _initialized = true;
+    }
+
+    private static async Task EnsureColumnAsync(SqliteConnection connection, string table, string column, string definition)
+    {
+        await using var check = connection.CreateCommand();
+        check.CommandText = $"PRAGMA table_info({table})";
+        await using var reader = await check.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            if (reader.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+        await reader.DisposeAsync();
+        await using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+        await alter.ExecuteNonQueryAsync();
+    }
+
+    public async Task<List<PatientRow>> GetPatientChoicesAsync()
+    {
+        var rows = new List<PatientRow>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id, name, phone, birth_date, gender, notes FROM patients ORDER BY name";
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            rows.Add(new PatientRow(reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5)));
+        return rows;
     }
 
     public async Task<Dictionary<string,long>> GetCountsAsync()
