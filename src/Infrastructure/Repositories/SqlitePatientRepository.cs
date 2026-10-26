@@ -64,7 +64,7 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE domain_patients SET patient_number=$number, first_name=$first, last_name=$last,
-                date_of_birth=$birth, sex=$sex, phone_number=$phone WHERE id=$id;
+                date_of_birth=$birth, sex=$sex, phone_number=$phone, created_at_utc=$created WHERE id=$id;
             """;
         BindPatient(command, patient);
         if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
