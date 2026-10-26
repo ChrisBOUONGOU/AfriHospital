@@ -38,6 +38,7 @@ public sealed class AuthenticationService(
             IsActive = true
         };
         await users.CreateInitialAdministratorAsync(user, cancellationToken);
+        await connectionFactory.WriteAuditAsync(user.Username, "INITIAL_ADMIN_CREATED", "First administrator account created.", cancellationToken);
         return user;
     }
 
@@ -51,8 +52,12 @@ public sealed class AuthenticationService(
         var user = await users.GetByUsernameAsync(username, cancellationToken);
         if (user is null || !user.IsActive ||
             !passwordHasher.VerifyPassword(password, user.PasswordHash))
+        {
+            await connectionFactory.WriteAuditAsync(username.Trim(), "LOGIN_FAILED", "Credentials rejected or account inactive.", cancellationToken);
             return null;
+        }
 
+        await connectionFactory.WriteAuditAsync(user.Username, "LOGIN_SUCCESS", "User authenticated.", cancellationToken);
         return user;
     }
 
@@ -76,6 +81,7 @@ public sealed class AuthenticationService(
             IsActive = true
         };
         await users.AddAsync(user, cancellationToken);
+        await connectionFactory.WriteAuditAsync(user.Username, "USER_CREATED", "Hospital user account created with role " + user.Role + ".", cancellationToken);
         return user;
     }
 }
