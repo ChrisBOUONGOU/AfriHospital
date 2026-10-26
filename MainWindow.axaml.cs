@@ -270,7 +270,7 @@ public partial class MainWindow : Window
                 SetStatus("Renseignez le nom d'utilisateur, le mot de passe et le rôle.", true);
                 return;
             }
-            await _authentication.CreateUserAsync(username.Text.Trim(), password.Text, selectedRole);
+            await _authentication.CreateUserAsync(username.Text.Trim(), password.Text, selectedRole, createdBy: _currentUser?.Username);
             username.Text = "";
             password.Text = "";
             await Refresh();
