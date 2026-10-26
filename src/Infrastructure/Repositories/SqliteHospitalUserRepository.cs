@@ -7,6 +7,28 @@ namespace AfriHospital.src.Infrastructure.Repositories;
 
 public sealed class SqliteHospitalUserRepository(SqliteConnectionFactory factory) : IHospitalUserRepository
 {
+    public async Task<IReadOnlyList<HospitalUser>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        var users = new List<HospitalUser>();
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id, username, password_hash, role, is_active FROM hospital_users ORDER BY username;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            users.Add(new HospitalUser
+            {
+                Id = Guid.Parse(reader.GetString(0)),
+                Username = reader.GetString(1),
+                PasswordHash = reader.GetString(2),
+                Role = reader.GetString(3),
+                IsActive = reader.GetInt32(4) == 1
+            });
+        }
+        return users;
+    }
+
     public async Task<int> CountAsync(CancellationToken cancellationToken = default)
     {
         await using var connection = factory.CreateConnection();
