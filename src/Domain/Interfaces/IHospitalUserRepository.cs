@@ -4,6 +4,7 @@ namespace AfriHospital.src.Domain.Interfaces;
 
 public interface IHospitalUserRepository
 {
+    Task<IReadOnlyList<HospitalUser>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<int> CountAsync(CancellationToken cancellationToken = default);
     Task CreateInitialAdministratorAsync(HospitalUser user, CancellationToken cancellationToken = default);
     Task<HospitalUser?> GetByUsernameAsync(string username, CancellationToken cancellationToken = default);
