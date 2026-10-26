@@ -679,6 +679,7 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         }
 
         var safetyCopy = await CreateBackupAsync();
+        SqliteConnection.ClearAllPools();
         foreach (var suffix in new[] { "-wal", "-shm" })
         {
             var sidecar = _path + suffix;
