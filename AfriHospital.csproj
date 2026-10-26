@@ -29,7 +29,6 @@
     <Folder Include="src\Desktop\Assets\" />
     <Folder Include="src\Desktop\ViewModels\" />
     <Folder Include="src\Desktop\Views\" />
-    <Folder Include="src\Domain\Entities\" />
     <Folder Include="src\Domain\Enums\" />
     <Folder Include="src\Domain\Interfaces\" />
     <Folder Include="src\Infrastructure\Security\" />
