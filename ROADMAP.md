@@ -48,7 +48,7 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Ajouter les dépôts SQLite pour les nouvelles entités.
 - [x] Ajouter un hachage de mot de passe PBKDF2-SHA256 avec sel aléatoire et comparaison en temps constant.
 - [x] Ajouter un service applicatif de création de compte et de vérification des identifiants.
-- [ ] Relier progressivement l'interface Avalonia à ces nouveaux dépôts : l'interface actuelle utilise encore les anciennes tables.
+- [ ] Relier progressivement l'interface Avalonia à ces nouveaux dépôts : l'interface actuelle utilise encore les anciennes tables. Les tables domain_patients/domain_consultations sont séparées des tables historiques patients/consultations.
 - [ ] Créer un parcours de première configuration sécurisé pour le compte administrateur.
 - [ ] Appliquer les rôles et autorisations à chaque module de l'interface.
 
@@ -61,4 +61,4 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [ ] Exécuter les tests automatisés et confirmer un build réussi.
 
-> **Avertissement :** ce projet reste un prototype de développement. La base locale et les sauvegardes ne sont pas chiffrées, il n'y a pas encore d'authentification ni de contrôle d'accès. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
+> **Avertissement :** ce projet reste un prototype de développement. Une fondation d'authentification et un hachage de mots de passe existent dans le code, mais ils ne sont pas reliés à l'interface : aucun écran de connexion ni contrôle d'accès n'est actif. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
