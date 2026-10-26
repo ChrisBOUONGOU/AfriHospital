@@ -43,6 +43,15 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 
 ## Étape 5 — Sauvegarde, sécurité et déploiement
 
+- [x] Ajouter une fabrique de connexions SQLite et un schéma de persistance pour les nouvelles entités GUID.
+- [x] Ajouter les interfaces de dépôt pour les patients, consultations et utilisateurs hospitaliers.
+- [x] Ajouter les dépôts SQLite pour les nouvelles entités.
+- [x] Ajouter un hachage de mot de passe PBKDF2-SHA256 avec sel aléatoire et comparaison en temps constant.
+- [x] Ajouter un service applicatif de création de compte et de vérification des identifiants.
+- [ ] Relier progressivement l'interface Avalonia à ces nouveaux dépôts : l'interface actuelle utilise encore les anciennes tables.
+- [ ] Créer un parcours de première configuration sécurisé pour le compte administrateur.
+- [ ] Appliquer les rôles et autorisations à chaque module de l'interface.
+
 - [x] Ajouter une action de sauvegarde locale de la base SQLite.
 - [ ] Tester la restauration et automatiser les sauvegardes périodiques.
 - [ ] Mettre en place une authentification robuste et des rôles avec autorisations.
