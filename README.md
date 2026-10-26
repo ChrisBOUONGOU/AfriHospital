@@ -216,7 +216,8 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Ajouter les mouvements de stock, lots, fournisseurs et dates de péremption.
 - [ ] Ajouter les demandes d'analyses et les résultats de laboratoire.
 - [x] Créer et afficher des factures simples avec devise configurable.
-- [ ] Ajouter les paiements, remboursements, reçus et soldes restants.
+- [x] Enregistrer des paiements partiels ou complets et calculer le solde restant.
+- [ ] Ajouter les remboursements et reçus imprimables.
 - [ ] Valider les règles fiscales et monétaires du pays cible.
 
 ### Phase 4 — Sécurité et déploiement
@@ -465,7 +466,8 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Add stock movements, batches, suppliers, and expiration dates.
 - [ ] Add laboratory test requests and results.
 - [x] Create and display basic invoices with a configurable currency.
-- [ ] Add payments, refunds, receipts, and outstanding balances.
+- [x] Record partial/full payments and calculate outstanding balances.
+- [ ] Add refunds and printable receipts.
 - [ ] Validate tax and currency rules for the target country.
 
 ### Phase 4 — Security and Deployment
