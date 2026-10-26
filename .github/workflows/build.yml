@@ -21,3 +21,5 @@ jobs:
         run: dotnet restore AfriHospital.csproj
       - name: Build
         run: dotnet build AfriHospital.csproj --configuration Release --no-restore
+      - name: Test
+        run: dotnet test tests/AfriHospital.UnitTests/AfriHospital.UnitTests.csproj --configuration Release
