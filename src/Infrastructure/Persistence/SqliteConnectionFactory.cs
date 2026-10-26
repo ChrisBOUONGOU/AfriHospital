@@ -1,0 +1,69 @@
+using Microsoft.Data.Sqlite;
+
+namespace AfriHospital.src.Infrastructure.Persistence;
+
+public sealed class SqliteConnectionFactory
+{
+    private readonly string _connectionString;
+
+    public SqliteConnectionFactory(string? databasePath = null)
+    {
+        databasePath ??= Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "AfriHospital",
+            "afrihospital.db");
+
+        var directory = Path.GetDirectoryName(databasePath);
+        if (!string.IsNullOrWhiteSpace(directory))
+            Directory.CreateDirectory(directory);
+
+        _connectionString = new SqliteConnectionStringBuilder
+        {
+            DataSource = databasePath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            ForeignKeys = true
+        }.ToString();
+    }
+
+    public SqliteConnection CreateConnection() => new(_connectionString);
+
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        await using var connection = CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            PRAGMA foreign_keys = ON;
+            CREATE TABLE IF NOT EXISTS domain_patients (
+                id TEXT PRIMARY KEY NOT NULL,
+                patient_number TEXT NOT NULL UNIQUE,
+                first_name TEXT NOT NULL,
+                last_name TEXT NOT NULL,
+                date_of_birth TEXT NULL,
+                sex TEXT NULL,
+                phone_number TEXT NULL,
+                created_at_utc TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_domain_patients_name
+                ON domain_patients(last_name, first_name);
+            CREATE TABLE IF NOT EXISTS domain_consultations (
+                id TEXT PRIMARY KEY NOT NULL,
+                patient_id TEXT NOT NULL REFERENCES domain_patients(id),
+                practitioner_id TEXT NOT NULL,
+                consultation_date_utc TEXT NOT NULL,
+                clinical_notes TEXT NULL,
+                diagnosis TEXT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_domain_consultations_patient_date
+                ON domain_consultations(patient_id, consultation_date_utc);
+            CREATE TABLE IF NOT EXISTS hospital_users (
+                id TEXT PRIMARY KEY NOT NULL,
+                username TEXT NOT NULL COLLATE NOCASE UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+            """;
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+}
