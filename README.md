@@ -473,16 +473,20 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Add repository interfaces and SQLite repositories for the new entities.
 - [x] Add PBKDF2-SHA256 password hashing and an application service for credential verification.
 - [ ] Unify the new domain_patients/domain_consultations tables with the legacy tables used by the UI.
-- [ ] Connect login to the UI and create a secure first-administrator setup flow.
-- [ ] Enforce and test roles and permissions in every module.
+- [x] Connect login to the UI and create a first-administrator setup flow that only works when no user account exists.
+- [ ] Strengthen and test role permissions in every module (initial role-based navigation filtering is in place).
+- [x] Add an administrator page to create accounts with predefined roles.
 - [ ] Add an ASP.NET Core API if multi-workstation operation is selected.
 - [ ] Add PostgreSQL for multi-user operation if needed.
 - [x] Add a manual local backup action for the legacy SQLite database.
-- [ ] Test restoration and automate periodic backups.
+- [x] Add SQLite restore with integrity checking and a safety copy of the current database.
+- [ ] Test restoration scenarios and automate periodic backups.
 - [ ] Encrypt sensitive data and backups, and secure secrets and access.
-- [ ] Add a reliable audit log for sensitive operations.
+- [x] Audit successful/failed logins and user-account creation.
+- [ ] Extend and test the audit log for all sensitive operations.
 - [ ] Test offline operation and multi-workstation synchronization.
-- [ ] Confirm a successful GitHub Actions build and add automated tests.
+- [x] Add xUnit automated tests and run them in GitHub Actions.
+- [ ] Confirm a successful build and test run on the latest commit.
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. The authentication layer and new entities are not yet connected to the main UI.
 
