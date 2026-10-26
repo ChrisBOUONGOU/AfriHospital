@@ -14,6 +14,33 @@ public sealed class AuthenticationService(
     IHospitalUserRepository users,
     PasswordHasher passwordHasher)
 {
+    public async Task<int> CountUsersAsync(CancellationToken cancellationToken = default)
+    {
+        await connectionFactory.InitializeAsync(cancellationToken);
+        return await users.CountAsync(cancellationToken);
+    }
+
+    public async Task<HospitalUser> CreateInitialAdministratorAsync(
+        string username, string password, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            throw new ArgumentException("Le nom d'utilisateur est obligatoire.", nameof(username));
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 12)
+            throw new ArgumentException("Le mot de passe doit contenir au moins 12 caractères.", nameof(password));
+
+        await connectionFactory.InitializeAsync(cancellationToken);
+        var user = new HospitalUser
+        {
+            Id = Guid.NewGuid(),
+            Username = username.Trim(),
+            PasswordHash = passwordHasher.HashPassword(password),
+            Role = "Admin",
+            IsActive = true
+        };
+        await users.CreateInitialAdministratorAsync(user, cancellationToken);
+        return user;
+    }
+
     public async Task<HospitalUser?> AuthenticateAsync(
         string username, string password, CancellationToken cancellationToken = default)
     {
