@@ -176,7 +176,7 @@ Le chemin exact dépendra de l'organisation réelle du dépôt.
 
 ## 🔐 Sécurité et confidentialité
 
-La protection des données médicales est une priorité de conception. Une fondation de hachage des mots de passe et un service d'authentification existent, mais ne sont pas encore connectés à l'interface : aucun écran de connexion ni contrôle d'accès n'est actuellement appliqué aux modules. La base contient également deux schémas SQLite distincts.
+La protection des données médicales est une priorité de conception. Un écran de connexion, le parcours de création du premier administrateur et un écran administrateur de création de comptes sont maintenant connectés au service d'authentification. Les menus sont filtrés selon les rôles, et les événements de connexion/création de compte sont journalisés. Cette protection reste un premier niveau : les autorisations doivent encore être renforcées et testées. La base contient toujours deux schémas SQLite distincts.
 
 Les mesures à prévoir comprennent :
 
@@ -224,16 +224,19 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Ajouter les interfaces de dépôt et dépôts SQLite pour les nouvelles entités.
 - [x] Ajouter le hachage PBKDF2-SHA256 et un service applicatif de vérification des identifiants.
 - [ ] Unifier les nouvelles tables domain_patients/domain_consultations avec les tables historiques utilisées par l'interface.
-- [ ] Brancher la connexion à l'interface et créer un parcours sécurisé de premier administrateur.
-- [ ] Appliquer et tester les rôles et permissions dans chaque module.
+- [x] Brancher la connexion à l'interface et créer un parcours de premier administrateur avec création atomique du premier compte.
+- [ ] Renforcer et tester les rôles et permissions dans chaque module (le filtrage initial des menus est en place).
 - [ ] Ajouter l'API ASP.NET Core si le mode multi-postes est retenu.
 - [ ] Ajouter PostgreSQL pour le mode multi-utilisateurs si nécessaire.
 - [x] Ajouter une sauvegarde locale manuelle de la base SQLite historique.
-- [ ] Tester la restauration et automatiser les sauvegardes périodiques.
+- [x] Ajouter une restauration SQLite avec vérification d'intégrité et copie de sécurité préalable.
+- [ ] Tester la restauration sur plusieurs scénarios et automatiser les sauvegardes périodiques.
 - [ ] Chiffrer les données sensibles et les sauvegardes, sécuriser les secrets et les accès.
-- [ ] Ajouter un journal d'audit fiable pour les opérations sensibles.
+- [x] Journaliser les connexions réussies/échouées et la création de comptes.
+- [ ] Étendre et tester le journal d'audit sur toutes les opérations sensibles.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
-- [ ] Confirmer un build réussi via GitHub Actions et ajouter des tests automatisés.
+- [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
+- [ ] Confirmer que la compilation et les tests réussissent sur le dernier commit.
 
 > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. La couche d'authentification et les nouvelles entités ne sont pas encore reliées à l'interface principale.
 
@@ -422,7 +425,7 @@ The exact path depends on the repository's actual structure.
 
 ## 🔐 Security and Privacy
 
-Protecting medical data is a core design priority. Password-hashing and authentication-service foundations exist, but are not yet connected to the UI: there is no login screen or access control currently enforced by the modules. The database also contains two separate SQLite schemas.
+Protecting medical data is a core design priority. A login screen, first-administrator setup, and an administrator user-creation screen are now connected to the authentication service. Navigation is filtered by role, and login/account-creation events are audited. This is an initial protection layer: permissions still need stronger enforcement and testing. The database still contains two separate SQLite schemas.
 
 Planned safeguards include:
 
