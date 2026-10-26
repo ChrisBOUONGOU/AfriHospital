@@ -146,7 +146,7 @@ Le fonctionnement hors ligne avec synchronisation entre plusieurs appareils néc
 
 Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
-Le dépôt utilise actuellement un seul fichier projet, AfriHospital.csproj ; aucune suite de tests automatisés n'a été vérifiée.
+Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite de tests xUnit est présente et exécutée dans GitHub Actions ; le dernier résultat vérifié pour le code était une compilation réussie et 4 tests réussis.
 
 ### 1. Cloner le dépôt
 
@@ -239,9 +239,9 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Étendre et tester le journal d'audit sur toutes les opérations sensibles.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [ ] Confirmer que la compilation et les tests réussissent sur le dernier commit.
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (4 tests réussis sur le commit de code vérifié).
 
-> Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. La couche d'authentification et les nouvelles entités ne sont pas encore reliées à l'interface principale.
+> Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. En revanche, les nouvelles entités métier GUID et leurs dépôts SQLite ne sont pas encore unifiés avec les tables historiques utilisées par les modules existants.
 
 ## 🤝 Contribution
 
@@ -494,7 +494,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Add xUnit automated tests and run them in GitHub Actions.
 - [x] Confirm a successful build and automated test run in GitHub Actions (4 tests pass on the current code).
 
-> Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. The authentication layer and new entities are not yet connected to the main UI.
+> Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI, but the new GUID-based domain entities and repositories are not yet unified with the legacy tables used by existing modules.
 
 ## 🤝 Contributing
 
