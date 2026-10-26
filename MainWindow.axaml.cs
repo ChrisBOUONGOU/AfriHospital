@@ -537,11 +537,18 @@ public partial class MainWindow : Window
                 paid <= 0 || paymentMethod.SelectedItem is not string method)
             { SetStatus("Sélectionnez une facture, un montant positif et un moyen de paiement.", true); return; }
             var paymentId = await _database.RecordPaymentAsync(selected.Id, paid, method);
-            var receiptPath = await _database.CreateReceiptAsync(paymentId);
             invoiceChoice.SelectedItem = null;
             paymentAmount.Text = "";
             await Refresh();
-            SetStatus("Paiement enregistré. Reçu créé : " + receiptPath);
+            try
+            {
+                var receiptPath = await _database.CreateReceiptAsync(paymentId);
+                SetStatus("Paiement enregistré. Reçu créé : " + receiptPath);
+            }
+            catch (Exception receiptError)
+            {
+                SetStatus("Paiement enregistré, mais le reçu n'a pas pu être créé : " + receiptError.Message, true);
+            }
         });
 
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle facture"), patient, description, amount, currency, save } }));
