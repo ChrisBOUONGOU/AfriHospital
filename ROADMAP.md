@@ -59,6 +59,7 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Ajouter un journal d'audit fiable pour les opérations sensibles.
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
-- [ ] Exécuter les tests automatisés et confirmer un build réussi.
+- [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
+- [ ] Confirmer un build et une exécution de tests réussis après intégration de la connexion.
 
 > **Avertissement :** ce projet reste un prototype de développement. Une fondation d'authentification et un hachage de mots de passe existent dans le code, mais ils ne sont pas reliés à l'interface : aucun écran de connexion ni contrôle d'accès n'est actif. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
