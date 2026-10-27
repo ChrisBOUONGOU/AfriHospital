@@ -1062,57 +1062,6 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await alter.ExecuteNonQueryAsync();
     }
 
-    public async Task<bool> HasAppointmentConflictAsync(long patientId, string scheduledAt, long? excludingAppointmentId = null)
-    {
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT EXISTS(
-                SELECT 1 FROM appointments
-                WHERE patient_id=$patientId AND scheduled_at=$scheduledAt
-                  AND status <> 'Annulé'
-                  AND ($excludeId IS NULL OR id <> $excludeId)
-            );
-            """;
-        command.Parameters.AddWithValue("$patientId", patientId);
-        command.Parameters.AddWithValue("$scheduledAt", scheduledAt);
-        command.Parameters.AddWithValue("$excludeId", (object?)excludingAppointmentId ?? DBNull.Value);
-        return Convert.ToInt64(await command.ExecuteScalarAsync()) != 0;
-    }
-
-    public async Task<List<AppointmentRow>> GetAppointmentsAsync()
-    {
-        var rows = new List<AppointmentRow>();
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            SELECT a.id, COALESCE(a.patient_id, 0), COALESCE(p.name, a.patient_name),
-                   a.scheduled_at, a.reason, a.status
-            FROM appointments a LEFT JOIN patients p ON p.id=a.patient_id
-            ORDER BY a.scheduled_at DESC, a.id DESC;
-            """;
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            rows.Add(new AppointmentRow(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2),
-                reader.GetString(3), reader.GetString(4), reader.GetString(5)));
-        return rows;
-    }
-
-    public async Task<List<PatientRow>> GetPatientChoicesAsync()
-    {
-        var rows = new List<PatientRow>();
-        await using var connection = new SqliteConnection(ConnectionString);
-        await connection.OpenAsync();
-        await using var command = connection.CreateCommand();
-        command.CommandText = "SELECT id, name, phone, birth_date, gender, notes FROM patients ORDER BY name";
-        await using var reader = await command.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
-            rows.Add(new PatientRow(reader.GetInt64(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), reader.GetString(4), reader.GetString(5)));
-        return rows;
-    }
-
     public async Task<Dictionary<string,long>> GetCountsAsync()
     {
         var result = new Dictionary<string,long>();
@@ -1823,13 +1772,6 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         return rows;
     }
 
-    public async Task SavePatientAsync(long? id, string name, string phone, string birthDate, string gender, string notes)
-    {
-        if (id is null)
-            await ExecuteAsync("INSERT INTO patients(name, phone, birth_date, gender, notes) VALUES($n,$p,$b,$g,$notes)", ("$n", name), ("$p", phone), ("$b", birthDate), ("$g", gender), ("$notes", notes));
-        else
-            await ExecuteAsync("UPDATE patients SET name=$n, phone=$p, birth_date=$b, gender=$g, notes=$notes WHERE id=$id", ("$n", name), ("$p", phone), ("$b", birthDate), ("$g", gender), ("$notes", notes), ("$id", id.Value));
-    }
 }
 
 internal sealed record MedicineChoice(long Id, string Name, int Quantity, string Unit, int MinimumQuantity)
