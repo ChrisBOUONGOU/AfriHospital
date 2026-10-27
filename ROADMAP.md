@@ -18,8 +18,10 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Rechercher les patients par nom ou téléphone.
 - [x] Modifier un patient en le sélectionnant dans la liste.
 - [x] Enregistrer les fiches dans une base SQLite locale.
-- [ ] Ajouter la validation complète des dates et des champs selon les règles locales.
-- [ ] Ajouter des tests automatisés et vérifier la protection des données.
+- [x] Valider au niveau métier les champs obligatoires, les limites de longueur et les dates de naissance/consultation non futures.
+- [x] Ajouter des tests automatisés patients, consultations et rendez-vous (validation, persistance et historique).
+- [ ] Faire valider les règles de saisie spécifiques au pays cible.
+- [ ] Effectuer une revue de protection des données et de confidentialité avant toute utilisation avec de vraies données.
 
 ## Étape 3 — Consultations et rendez-vous
 
@@ -71,6 +73,6 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
-- [x] Confirmer le build et les tests après séparation des projets et ajout du socle MVVM (23 tests xUnit réussis, build sans avertissement ni erreur).
+- [x] Confirmer le build et les tests après séparation des projets et ajout du socle MVVM (28 tests xUnit réussis, build sans avertissement ni erreur).
 
 > **Avertissement :** ce projet reste un prototype de développement. Les écrans Patients et Consultations passent maintenant par les dépôts métier, mais le refactoring global n'est pas terminé et d'autres modules utilisent encore du SQL dans `MainWindow`. L'écran de connexion et le filtrage initial des menus sont en place ; les permissions ne sont toutefois pas encore renforcées et testées dans chaque module. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
