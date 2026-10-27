@@ -16,6 +16,8 @@ AfriHospital est un projet d'application de gestion hospitalière conçu pour fa
 
 Développé avec **C#, .NET et Avalonia UI**, le projet vise à proposer une application multiplateforme, évolutive et adaptée aux réalités des établissements de santé en Afrique, notamment aux connexions Internet instables et aux ressources informatiques limitées.
 
+L’interface de bureau propose un sélecteur de langue **Français / English**. Les traductions sont en cours d’extension : certains libellés ou contenus générés peuvent encore apparaître en français.
+
 > **Statut :** en développement. Les fonctionnalités décrites ci-dessous sont des objectifs du projet et ne sont pas nécessairement toutes implémentées.
 
 ## 🎯 Objectifs
@@ -285,6 +287,8 @@ La licence reste à définir. Tant qu'un fichier `LICENSE` n'est pas ajouté au 
 AfriHospital is a hospital management application project designed to support healthcare professionals, improve healthcare facility operations, and centralize patients' administrative and medical information.
 
 Built with **C#, .NET, and Avalonia UI**, the project aims to provide a cross-platform and extensible application adapted to healthcare facilities across Africa, including environments with unreliable Internet connectivity and limited computing resources.
+
+The desktop interface includes a **French / English** language selector. Translations are being expanded, so some labels or generated content may still appear in French.
 
 > **Status:** In development. The features described below are project goals and may not all be implemented yet.
 
