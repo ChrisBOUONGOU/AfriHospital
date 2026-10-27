@@ -720,7 +720,7 @@ public partial class MainWindow : Window
         {
             var path = await _database.CreateBackupAsync();
             await _database.WriteAuditAsync("DATABASE_BACKUP_CREATED", "database", _currentUser?.Username, "Local SQLite backup created.");
-            _content.Children.Add(Card(new TextBlock { Text = "Sauvegarde créée : " + path, TextWrapping = Wrap, Foreground = Brush("#166534") }));
+            _content.Children.Add(Card(new TextBlock { Text = "Sauvegarde créée : " + path, TextWrapping = TextWrapping.Wrap, Foreground = Brush("#166534") }));
             SetStatus("Sauvegarde créée. Protégez ce fichier contre tout accès non autorisé.");
         });
 
