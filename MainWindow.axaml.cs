@@ -797,9 +797,14 @@ public partial class MainWindow : Window
 
 internal sealed class HospitalDatabase
 {
-    private readonly string _path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AfriHospital", "afrihospital.db");
+    private readonly string _path;
     private string ConnectionString => new SqliteConnectionStringBuilder { DataSource = _path, Mode = SqliteOpenMode.ReadWriteCreate }.ToString();
     private bool _initialized;
+
+    internal HospitalDatabase(string? databasePath = null)
+    {
+        _path = databasePath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AfriHospital", "afrihospital.db");
+    }
 
     public async Task InitializeAsync()
     {
@@ -1074,6 +1079,10 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         {
             if (string.IsNullOrWhiteSpace(batchNumber) || string.IsNullOrWhiteSpace(expiryDate))
                 throw new ArgumentException("Le numéro de lot et la date de péremption sont obligatoires pour une entrée.");
+            if (!DateOnly.TryParseExact(expiryDate, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var parsedExpiry) ||
+                parsedExpiry < DateOnly.FromDateTime(DateTime.Today))
+                throw new ArgumentException("La date de péremption doit être valide et ne pas être passée.");
             long? existingId = null;
             int existingQuantity = 0;
             string? existingExpiry = null;
