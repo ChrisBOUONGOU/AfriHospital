@@ -737,13 +737,23 @@ public partial class MainWindow : Window
         var invoiceChoice = new ComboBox { MinWidth = 260, PlaceholderText = "Choisir une facture à régler" };
         var paymentAmount = Field("Montant du paiement");
         var paymentMethod = new ComboBox { MinWidth = 260, ItemsSource = new[] { "Espèces", "Carte", "Virement", "Mobile money" }, SelectedIndex = 0 };
+        var refundablePayment = new ComboBox { MinWidth = 280, PlaceholderText = "Choisir un paiement à rembourser" };
+        var refundAmount = Field("Montant du remboursement");
+        var refundMethod = new ComboBox { MinWidth = 260, ItemsSource = new[] { "Espèces", "Virement", "Mobile money", "Carte" }, SelectedIndex = 0 };
+        var refundReason = Field("Motif du remboursement (obligatoire)");
 
         async Task Refresh()
         {
             list.ItemsSource = await _database.GetRowsAsync(
-                "SELECT i.id, i.patient_name, i.description, i.amount, i.currency, i.status, COALESCE(SUM(p.amount),0) FROM invoices i LEFT JOIN payments p ON p.invoice_id=i.id GROUP BY i.id ORDER BY i.id DESC",
-                r => $"Facture #{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · Total {r.GetDecimal(3):0.00} {r.GetString(4)} · Payé {r.GetDecimal(6):0.00} · {r.GetString(5)}");
+                """
+                SELECT i.id, i.patient_name, i.description, i.amount, i.currency, i.status,
+                       COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id=i.id),0)
+                       - COALESCE((SELECT SUM(r.amount) FROM refunds r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=i.id),0)
+                FROM invoices i ORDER BY i.id DESC
+                """,
+                r => $"Facture #{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · Total {r.GetDecimal(3):0.00} {r.GetString(4)} · Net encaissé {r.GetDecimal(6):0.00} · {r.GetString(5)}");
             invoiceChoice.ItemsSource = await _database.GetInvoiceChoicesAsync();
+            refundablePayment.ItemsSource = await _database.GetRefundablePaymentsAsync();
         }
 
         var save = ActionButton("Créer la facture");
@@ -787,9 +797,33 @@ public partial class MainWindow : Window
             }
         });
 
+        var refund = ActionButton("Enregistrer le remboursement", false);
+        refund.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (refundablePayment.SelectedItem is not RefundChoice selected ||
+                !decimal.TryParse(refundAmount.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var refunded) ||
+                refunded <= 0 || refundMethod.SelectedItem is not string method || string.IsNullOrWhiteSpace(refundReason.Text))
+            { SetStatus("Sélectionnez un paiement, un montant positif, un moyen et un motif de remboursement.", true); return; }
+            if (refundReason.Text.Trim().Length > 250)
+            { SetStatus("Le motif du remboursement ne doit pas dépasser 250 caractères.", true); return; }
+            var refundId = await _database.RecordRefundAsync(selected.PaymentId, refunded, method, refundReason.Text.Trim());
+            refundAmount.Text = refundReason.Text = "";
+            await Refresh();
+            try
+            {
+                var receiptPath = await _database.CreateRefundReceiptAsync(refundId);
+                SetStatus("Remboursement enregistré. Reçu : " + receiptPath);
+            }
+            catch (Exception receiptError)
+            {
+                SetStatus("Remboursement enregistré, mais le reçu n'a pas pu être créé : " + receiptError.Message, true);
+            }
+        });
+
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle facture"), patient, description, amount, currency, save } }));
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Enregistrer un paiement"), invoiceChoice, paymentAmount, paymentMethod, pay } }));
-        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Factures et montants encaissés"), list } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Rembourser un paiement"), refundablePayment, refundAmount, refundMethod, refundReason, refund } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Factures et montants nets encaissés"), list } }));
         await Refresh();
     }
 
@@ -844,6 +878,15 @@ CREATE INDEX IF NOT EXISTS ix_medicine_movements_medicine_date ON medicine_stock
 CREATE TABLE IF NOT EXISTS invoices(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', amount NUMERIC NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'À payer', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL REFERENCES invoices(id), amount NUMERIC NOT NULL CHECK(amount > 0), method TEXT NOT NULL, paid_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS ix_payments_invoice ON payments(invoice_id);
+CREATE TABLE IF NOT EXISTS refunds(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ payment_id INTEGER NOT NULL REFERENCES payments(id),
+ amount NUMERIC NOT NULL CHECK(amount > 0),
+ method TEXT NOT NULL,
+ reason TEXT NOT NULL,
+ refunded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_refunds_payment ON refunds(payment_id);
 CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);";
         await command.ExecuteNonQueryAsync();
         // Preserve pre-existing quantities as a legacy batch; do not invent an expiry date.
@@ -1198,9 +1241,13 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await connection.OpenAsync();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT i.id, i.patient_name, i.description, i.amount, i.currency, COALESCE(SUM(p.amount), 0)
-            FROM invoices i LEFT JOIN payments p ON p.invoice_id=i.id
-            GROUP BY i.id HAVING i.amount > COALESCE(SUM(p.amount), 0)
+            SELECT i.id, i.patient_name, i.description, i.amount, i.currency,
+                   COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id=i.id),0)
+                   - COALESCE((SELECT SUM(r.amount) FROM refunds r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=i.id),0)
+            FROM invoices i
+            WHERE i.amount >
+                  COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id=i.id),0)
+                  - COALESCE((SELECT SUM(r.amount) FROM refunds r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=i.id),0)
             ORDER BY i.id DESC;
             """;
         await using var reader = await command.ExecuteReaderAsync();
@@ -1231,7 +1278,11 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using (var sum = connection.CreateCommand())
         {
             sum.Transaction = transaction;
-            sum.CommandText = "SELECT COALESCE(SUM(amount),0) FROM payments WHERE invoice_id=$id;";
+            sum.CommandText = """
+                SELECT COALESCE(SUM(p.amount),0)
+                     - COALESCE((SELECT SUM(r.amount) FROM refunds r JOIN payments p2 ON p2.id=r.payment_id WHERE p2.invoice_id=$id),0)
+                FROM payments p WHERE p.invoice_id=$id;
+                """;
             sum.Parameters.AddWithValue("$id", invoiceId);
             alreadyPaid = Convert.ToDecimal(await sum.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
         }
@@ -1271,6 +1322,150 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         }
         transaction.Commit();
         return paymentId;
+    }
+
+    public async Task<List<RefundChoice>> GetRefundablePaymentsAsync()
+    {
+        var items = new List<RefundChoice>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT p.id, p.invoice_id, i.patient_name, p.amount, COALESCE(SUM(r.amount),0), p.method
+            FROM payments p
+            JOIN invoices i ON i.id=p.invoice_id
+            LEFT JOIN refunds r ON r.payment_id=p.id
+            GROUP BY p.id
+            HAVING p.amount > COALESCE(SUM(r.amount),0)
+            ORDER BY p.id DESC;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            items.Add(new RefundChoice(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2),
+                reader.GetDecimal(3), reader.GetDecimal(4), reader.GetString(5)));
+        return items;
+    }
+
+    public async Task<long> RecordRefundAsync(long paymentId, decimal amount, string method, string reason)
+    {
+        if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount), "Le remboursement doit être positif.");
+        if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("Le moyen de remboursement est obligatoire.", nameof(method));
+        if (string.IsNullOrWhiteSpace(reason) || reason.Trim().Length > 250)
+            throw new ArgumentException("Le motif du remboursement est obligatoire et limité à 250 caractères.", nameof(reason));
+
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+        long invoiceId;
+        decimal originalAmount;
+        decimal alreadyRefunded;
+        await using (var payment = connection.CreateCommand())
+        {
+            payment.Transaction = transaction;
+            payment.CommandText = "SELECT invoice_id, amount FROM payments WHERE id=$id;";
+            payment.Parameters.AddWithValue("$id", paymentId);
+            await using var reader = await payment.ExecuteReaderAsync();
+            if (!await reader.ReadAsync()) throw new KeyNotFoundException("Paiement introuvable.");
+            invoiceId = reader.GetInt64(0);
+            originalAmount = reader.GetDecimal(1);
+        }
+        await using (var totalRefunded = connection.CreateCommand())
+        {
+            totalRefunded.Transaction = transaction;
+            totalRefunded.CommandText = "SELECT COALESCE(SUM(amount),0) FROM refunds WHERE payment_id=$id;";
+            totalRefunded.Parameters.AddWithValue("$id", paymentId);
+            alreadyRefunded = Convert.ToDecimal(await totalRefunded.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        if (amount > originalAmount - alreadyRefunded)
+            throw new InvalidOperationException("Le remboursement dépasse le montant encore remboursable de ce paiement.");
+
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = "INSERT INTO refunds(payment_id,amount,method,reason) VALUES($payment,$amount,$method,$reason);";
+            insert.Parameters.AddWithValue("$payment", paymentId);
+            insert.Parameters.AddWithValue("$amount", amount);
+            insert.Parameters.AddWithValue("$method", method.Trim());
+            insert.Parameters.AddWithValue("$reason", reason.Trim());
+            await insert.ExecuteNonQueryAsync();
+        }
+        await using var idCommand = connection.CreateCommand();
+        idCommand.Transaction = transaction;
+        idCommand.CommandText = "SELECT last_insert_rowid();";
+        var refundId = Convert.ToInt64(await idCommand.ExecuteScalarAsync());
+
+        decimal netPaid;
+        decimal invoiceTotal;
+        await using (var invoice = connection.CreateCommand())
+        {
+            invoice.Transaction = transaction;
+            invoice.CommandText = "SELECT amount FROM invoices WHERE id=$id;";
+            invoice.Parameters.AddWithValue("$id", invoiceId);
+            invoiceTotal = Convert.ToDecimal(await invoice.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        await using (var net = connection.CreateCommand())
+        {
+            net.Transaction = transaction;
+            net.CommandText = """
+                SELECT COALESCE((SELECT SUM(amount) FROM payments WHERE invoice_id=$id),0)
+                     - COALESCE((SELECT SUM(r.amount) FROM refunds r JOIN payments p ON p.id=r.payment_id WHERE p.invoice_id=$id),0);
+                """;
+            net.Parameters.AddWithValue("$id", invoiceId);
+            netPaid = Convert.ToDecimal(await net.ExecuteScalarAsync(), System.Globalization.CultureInfo.InvariantCulture);
+        }
+        var status = netPaid <= 0 ? "À payer" : netPaid >= invoiceTotal ? "Payée" : "Partiellement payée";
+        await using (var update = connection.CreateCommand())
+        {
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE invoices SET status=$status WHERE id=$id;";
+            update.Parameters.AddWithValue("$status", status);
+            update.Parameters.AddWithValue("$id", invoiceId);
+            await update.ExecuteNonQueryAsync();
+        }
+        await using (var audit = connection.CreateCommand())
+        {
+            audit.Transaction = transaction;
+            audit.CommandText = "INSERT INTO audit_log(action,entity) VALUES('REFUND_RECORDED','invoice');";
+            await audit.ExecuteNonQueryAsync();
+        }
+        transaction.Commit();
+        return refundId;
+    }
+
+    public async Task<string> CreateRefundReceiptAsync(long refundId)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT r.id, p.id, i.patient_name, i.description, r.amount, i.currency, r.method, r.reason, r.refunded_at
+            FROM refunds r JOIN payments p ON p.id=r.payment_id JOIN invoices i ON i.id=p.invoice_id
+            WHERE r.id=$id;
+            """;
+        command.Parameters.AddWithValue("$id", refundId);
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) throw new KeyNotFoundException("Remboursement introuvable pour générer le reçu.");
+        var receipt = string.Join(Environment.NewLine, new[]
+        {
+            "AFRIHOSPITAL — REÇU DE REMBOURSEMENT",
+            "===================================",
+            $"Remboursement n° : {reader.GetInt64(0)}",
+            $"Paiement d'origine n° : {reader.GetInt64(1)}",
+            $"Patient : {reader.GetString(2)}",
+            $"Description : {reader.GetString(3)}",
+            $"Montant remboursé : {reader.GetDecimal(4).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)} {reader.GetString(5)}",
+            $"Moyen : {reader.GetString(6)}",
+            $"Motif : {reader.GetString(7)}",
+            $"Date : {reader.GetString(8)}",
+            "",
+            "Document généré localement. Conservez-le de manière sécurisée."
+        });
+        await reader.DisposeAsync();
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AfriHospital-Receipts");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, $"refund-{refundId}-{DateTime.UtcNow:yyyyMMddHHmmss}.txt");
+        await File.WriteAllTextAsync(path, receipt, new System.Text.UTF8Encoding(false));
+        return path;
     }
 
     public async Task<string> CreateReceiptAsync(long paymentId)
@@ -1442,6 +1637,12 @@ internal sealed record AppointmentRow(long Id, long PatientId, string PatientNam
 internal sealed record PatientRow(long Id, string Name, string Phone, string BirthDate, string Gender, string Notes)
 {
     public override string ToString() => $"#{Id} · {Name} · {Phone}";
+}
+
+internal sealed record RefundChoice(long PaymentId, long InvoiceId, string PatientName, decimal OriginalAmount, decimal Refunded, string OriginalMethod)
+{
+    public decimal Available => OriginalAmount - Refunded;
+    public override string ToString() => $"Paiement #{PaymentId} · Facture #{InvoiceId} · {PatientName} · remboursable {Available:0.00} · {OriginalMethod}";
 }
 
 internal sealed record InvoiceChoice(long Id, string PatientName, string Description, decimal Total, string Currency, decimal Paid)
