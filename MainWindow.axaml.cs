@@ -544,8 +544,10 @@ public partial class MainWindow : Window
         var movementQuantity = Field("Quantité du mouvement");
         var unitCost = Field("Coût unitaire d’achat (ex. 1.20)");
         var note = Field("Note / motif (facultatif)");
-        var batches = new ComboBox { MinWidth = 280, PlaceholderText = "Choisir un lot pour la sortie" };
+        var batches = new ComboBox { MinWidth = 280, PlaceholderText = "Choisir un lot pour la sortie", IsVisible = false };
+        batchNumber.IsVisible = expiry.IsVisible = supplier.IsVisible = unitCost.IsVisible = true;
         var list = new ListBox { MinHeight = 240 };
+        var movementList = new ListBox { MinHeight = 180 };
 
         async Task RefreshMedicines(long? keepSelected = null)
         {
@@ -569,6 +571,7 @@ public partial class MainWindow : Window
                 FROM medicines m ORDER BY m.name
                 """, r => $"{r.GetString(0)} · stock {r.GetInt32(1)} {r.GetString(2)} · prix {r.GetDecimal(3):0.00} · seuil {r.GetInt32(4)} · lots {r.GetInt32(5)} · lots périmés {r.GetInt32(6)}",
                 ("$today", DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)));
+            movementList.ItemsSource = await _database.GetStockMovementRowsAsync();
         }
 
         async Task RefreshBatches()
@@ -667,6 +670,7 @@ public partial class MainWindow : Window
             movementQuantity, unitCost, note, recordMovement
         }}));
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Stock, seuils et lots périmés"), list } }));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Historique des mouvements de stock"), movementList } }));
         operation.SelectedIndex = 0;
         await RefreshMedicines();
     }
@@ -962,6 +966,26 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         while (await reader.ReadAsync())
             items.Add(new MedicineChoice(reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3), reader.GetInt32(4)));
         return items;
+    }
+
+    public async Task<List<string>> GetStockMovementRowsAsync()
+    {
+        var rows = new List<string>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT sm.id, m.name, COALESCE(b.batch_number, '—'), sm.movement_type,
+                   sm.quantity, sm.note, sm.created_at
+            FROM medicine_stock_movements sm
+            JOIN medicines m ON m.id=sm.medicine_id
+            LEFT JOIN medicine_batches b ON b.id=sm.batch_id
+            ORDER BY sm.id DESC LIMIT 200;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            rows.Add($"#{reader.GetInt64(0)} · {reader.GetString(1)} · lot {reader.GetString(2)} · {reader.GetString(3)} {reader.GetInt32(4)} · {reader.GetString(5)} · {reader.GetString(6)}");
+        return rows;
     }
 
     public async Task<List<MedicineBatchChoice>> GetBatchChoicesAsync(long medicineId)
