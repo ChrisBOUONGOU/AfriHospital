@@ -789,7 +789,15 @@ public partial class MainWindow : Window
             try
             {
                 var receiptPath = await _database.CreateReceiptAsync(paymentId);
-                SetStatus("Paiement enregistré. Reçu créé : " + receiptPath);
+                try
+                {
+                    var printablePath = await _database.CreatePrintableReceiptAsync(paymentId);
+                    SetStatus("Paiement enregistré. Reçu texte : " + receiptPath + " · Reçu imprimable : " + printablePath);
+                }
+                catch (Exception printableError)
+                {
+                    SetStatus("Paiement enregistré. Reçu texte : " + receiptPath + " · Reçu imprimable indisponible : " + printableError.Message, true);
+                }
             }
             catch (Exception receiptError)
             {
@@ -812,7 +820,15 @@ public partial class MainWindow : Window
             try
             {
                 var receiptPath = await _database.CreateRefundReceiptAsync(refundId);
-                SetStatus("Remboursement enregistré. Reçu : " + receiptPath);
+                try
+                {
+                    var printablePath = await _database.CreatePrintableRefundReceiptAsync(refundId);
+                    SetStatus("Remboursement enregistré. Reçu texte : " + receiptPath + " · Reçu imprimable : " + printablePath);
+                }
+                catch (Exception printableError)
+                {
+                    SetStatus("Remboursement enregistré. Reçu texte : " + receiptPath + " · Reçu imprimable indisponible : " + printableError.Message, true);
+                }
             }
             catch (Exception receiptError)
             {
@@ -1465,6 +1481,81 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         Directory.CreateDirectory(folder);
         var path = Path.Combine(folder, $"refund-{refundId}-{DateTime.UtcNow:yyyyMMddHHmmss}.txt");
         await File.WriteAllTextAsync(path, receipt, new System.Text.UTF8Encoding(false));
+        return path;
+    }
+
+    public async Task<string> CreatePrintableReceiptAsync(long paymentId)
+    {
+        var fields = new List<(string Label, string Value)>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT p.id, p.invoice_id, i.patient_name, i.description, p.amount, i.currency, p.method, p.paid_at
+            FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.id=$id;
+            """;
+        command.Parameters.AddWithValue("$id", paymentId);
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) throw new KeyNotFoundException("Paiement introuvable pour générer le reçu imprimable.");
+        fields.Add(("Reçu n°", reader.GetInt64(0).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        fields.Add(("Facture n°", reader.GetInt64(1).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        fields.Add(("Patient", reader.GetString(2)));
+        fields.Add(("Description", reader.GetString(3)));
+        fields.Add(("Montant reçu", reader.GetDecimal(4).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " " + reader.GetString(5)));
+        fields.Add(("Moyen de paiement", reader.GetString(6)));
+        fields.Add(("Date", reader.GetString(7)));
+        await reader.DisposeAsync();
+        return await WritePrintableReceiptAsync("Reçu de paiement", fields, "receipt", paymentId);
+    }
+
+    public async Task<string> CreatePrintableRefundReceiptAsync(long refundId)
+    {
+        var fields = new List<(string Label, string Value)>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT r.id, p.id, i.patient_name, i.description, r.amount, i.currency, r.method, r.reason, r.refunded_at
+            FROM refunds r JOIN payments p ON p.id=r.payment_id JOIN invoices i ON i.id=p.invoice_id
+            WHERE r.id=$id;
+            """;
+        command.Parameters.AddWithValue("$id", refundId);
+        await using var reader = await command.ExecuteReaderAsync();
+        if (!await reader.ReadAsync()) throw new KeyNotFoundException("Remboursement introuvable pour générer le reçu imprimable.");
+        fields.Add(("Remboursement n°", reader.GetInt64(0).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        fields.Add(("Paiement d'origine n°", reader.GetInt64(1).ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        fields.Add(("Patient", reader.GetString(2)));
+        fields.Add(("Description", reader.GetString(3)));
+        fields.Add(("Montant remboursé", reader.GetDecimal(4).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) + " " + reader.GetString(5)));
+        fields.Add(("Moyen de remboursement", reader.GetString(6)));
+        fields.Add(("Motif", reader.GetString(7)));
+        fields.Add(("Date", reader.GetString(8)));
+        await reader.DisposeAsync();
+        return await WritePrintableReceiptAsync("Reçu de remboursement", fields, "refund", refundId);
+    }
+
+    private static async Task<string> WritePrintableReceiptAsync(string title, IReadOnlyList<(string Label, string Value)> fields, string prefix, long id)
+    {
+        var rows = string.Join("", fields.Select(field =>
+            "<tr><th>" + System.Net.WebUtility.HtmlEncode(field.Label) + "</th><td>" +
+            System.Net.WebUtility.HtmlEncode(field.Value) + "</td></tr>"));
+        var html = "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>" +
+            System.Net.WebUtility.HtmlEncode(title) + "</title><style>" +
+            "body{font-family:Arial,sans-serif;color:#171717;margin:0;padding:32px;background:#f3f4f6}" +
+            ".receipt{max-width:760px;margin:auto;background:white;border:1px solid #ddd;padding:32px;border-top:10px solid #A8E66B}" +
+            "h1{margin:0;color:#171717}h2{margin-top:8px;font-weight:normal;color:#555}" +
+            "table{width:100%;border-collapse:collapse;margin-top:28px}th,td{text-align:left;padding:12px;border-bottom:1px solid #ddd;vertical-align:top}" +
+            "th{width:34%;background:#f8f8f8}.print{margin-top:24px;padding:12px 18px;background:#FFD43B;border:0;cursor:pointer}" +
+            "@media print{body{background:white;padding:0}.receipt{border:0;border-top:8px solid #A8E66B;max-width:none}.print{display:none}}" +
+            "</style></head><body><main class=\"receipt\"><h1>AfriHospital</h1><h2>" +
+            System.Net.WebUtility.HtmlEncode(title) + "</h2><table>" + rows +
+            "</table><p>Document généré localement. Conservez-le de manière sécurisée.</p>" +
+            "<button class=\"print\" onclick=\"window.print()\">Imprimer / Enregistrer en PDF</button>" +
+            "</main></body></html>";
+        var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "AfriHospital-Receipts");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, $"{prefix}-{id}-{DateTime.UtcNow:yyyyMMddHHmmss}.html");
+        await File.WriteAllTextAsync(path, html, new System.Text.UTF8Encoding(false));
         return path;
     }
 
