@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System;
 
 namespace AfriHospital.src.Domain.Entities
 {
@@ -13,6 +11,11 @@ namespace AfriHospital.src.Domain.Entities
         public DateOnly? DateOfBirth { get; set; }
         public string? Sex { get; set; }
         public string? PhoneNumber { get; set; }
+        public string? Notes { get; set; }
         public DateTime CreatedAtUtc { get; set; }
+
+        public string FullName => $"{FirstName} {LastName}".Trim();
+
+        public override string ToString() => $"{PatientNumber} · {FullName} · {PhoneNumber}";
     }
 }
