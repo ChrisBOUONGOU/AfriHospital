@@ -52,31 +52,32 @@ public static class LegacyDomainDataMigration
                 ? createdAt.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
                 : DateTime.UnixEpoch.ToString("O", CultureInfo.InvariantCulture);
 
-            await using var insert = connection.CreateCommand();
-            insert.Transaction = transaction;
-            insert.CommandText = """
-                INSERT INTO domain_patients
-                    (id, patient_number, first_name, last_name, date_of_birth, sex, phone_number, created_at_utc, legacy_patient_id)
-                VALUES ($id, $number, $first, $last, $birth, $sex, $phone, $created, $legacyId)
-                ON CONFLICT(legacy_patient_id) DO UPDATE SET
-                    patient_number=CASE WHEN domain_patients.patient_number LIKE 'LEGACY-%' THEN excluded.patient_number ELSE domain_patients.patient_number END,
-                    first_name=excluded.first_name,
-                    last_name=excluded.last_name,
-                    date_of_birth=excluded.date_of_birth,
-                    sex=excluded.sex,
-                    phone_number=excluded.phone_number,
-                    created_at_utc=excluded.created_at_utc;
+            var number = string.IsNullOrWhiteSpace(legacy.PatientNumber) ? $"LEGACY-{legacy.Id}" : legacy.PatientNumber.Trim();
+            await using var update = connection.CreateCommand();
+            update.Transaction = transaction;
+            update.CommandText = """
+                UPDATE domain_patients SET
+                    patient_number=CASE WHEN patient_number LIKE 'LEGACY-%' THEN $number ELSE patient_number END,
+                    first_name=$first, last_name=$last, date_of_birth=$birth, sex=$sex,
+                    phone_number=$phone, created_at_utc=$created
+                WHERE legacy_patient_id=$legacyId;
                 """;
-            insert.Parameters.AddWithValue("$id", StableGuid($"legacy-patient:{legacy.Id}").ToString("D"));
-            insert.Parameters.AddWithValue("$number", string.IsNullOrWhiteSpace(legacy.PatientNumber) ? $"LEGACY-{legacy.Id}" : legacy.PatientNumber.Trim());
-            insert.Parameters.AddWithValue("$first", parts.First);
-            insert.Parameters.AddWithValue("$last", parts.Last);
-            insert.Parameters.AddWithValue("$birth", (object?)birth ?? DBNull.Value);
-            insert.Parameters.AddWithValue("$sex", string.IsNullOrWhiteSpace(legacy.Gender) ? DBNull.Value : legacy.Gender);
-            insert.Parameters.AddWithValue("$phone", string.IsNullOrWhiteSpace(legacy.Phone) ? DBNull.Value : legacy.Phone);
-            insert.Parameters.AddWithValue("$created", created);
-            insert.Parameters.AddWithValue("$legacyId", legacy.Id);
-            imported += await insert.ExecuteNonQueryAsync(cancellationToken);
+            BindLegacyPatient(update, legacy, parts.First, parts.Last, birth, created, number);
+            var updated = await update.ExecuteNonQueryAsync(cancellationToken);
+            if (updated == 0)
+            {
+                await using var insert = connection.CreateCommand();
+                insert.Transaction = transaction;
+                insert.CommandText = """
+                    INSERT OR IGNORE INTO domain_patients
+                        (id, patient_number, first_name, last_name, date_of_birth, sex, phone_number, created_at_utc, legacy_patient_id)
+                    VALUES ($id, $number, $first, $last, $birth, $sex, $phone, $created, $legacyId);
+                    """;
+                insert.Parameters.AddWithValue("$id", StableGuid($"legacy-patient:{legacy.Id}").ToString("D"));
+                BindLegacyPatient(insert, legacy, parts.First, parts.Last, birth, created, number);
+                imported += await insert.ExecuteNonQueryAsync(cancellationToken);
+            }
+            else imported += updated;
         }
 
         if (await TableExistsAsync(connection, transaction, "consultations", cancellationToken))
@@ -131,6 +132,18 @@ public static class LegacyDomainDataMigration
 
         await transaction.CommitAsync(cancellationToken);
         return imported;
+    }
+
+    private static void BindLegacyPatient(SqliteCommand command, LegacyPatient legacy, string first, string last, string? birth, string created, string number)
+    {
+        command.Parameters.AddWithValue("$number", number);
+        command.Parameters.AddWithValue("$first", first);
+        command.Parameters.AddWithValue("$last", last);
+        command.Parameters.AddWithValue("$birth", (object?)birth ?? DBNull.Value);
+        command.Parameters.AddWithValue("$sex", string.IsNullOrWhiteSpace(legacy.Gender) ? DBNull.Value : legacy.Gender);
+        command.Parameters.AddWithValue("$phone", string.IsNullOrWhiteSpace(legacy.Phone) ? DBNull.Value : legacy.Phone);
+        command.Parameters.AddWithValue("$created", created);
+        command.Parameters.AddWithValue("$legacyId", legacy.Id);
     }
 
     private static async Task<int> ExportDomainOnlyPatientsAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
