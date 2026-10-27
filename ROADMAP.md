@@ -39,7 +39,7 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Afficher les alertes de stock faible sur le tableau de bord.
 - [x] Enregistrer les paiements partiels/complets, calculer le solde et mettre à jour le statut de facture.
 - [x] Générer un reçu texte local après l'enregistrement d'un paiement.
-- [ ] Gérer les remboursements et produire des reçus formatés.
+- [x] Gérer les remboursements partiels/complets, recalculer les soldes et statuts, et produire des reçus texte et HTML imprimables.
 - [x] Gérer les lots, numéros de lot, péremptions, fournisseurs et mouvements d'entrée/sortie de stock.
 - [ ] Valider les règles fiscales et monétaires de chaque pays cible.
 
