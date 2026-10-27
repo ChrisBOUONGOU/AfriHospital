@@ -1277,7 +1277,7 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
             audit.CommandText = "INSERT INTO audit_log(action,entity,actor,details) VALUES($action,'medicine',$actor,$details);";
             audit.Parameters.AddWithValue("$action", inbound ? "STOCK_IN" : "STOCK_OUT");
             audit.Parameters.AddWithValue("$actor", string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim());
-            audit.Parameters.AddWithValue("$details", $"medicine_id={medicineId}; batch_id={batchId}; quantity={quantity}; note={note}");
+            audit.Parameters.AddWithValue("$details", $"medicine_id={medicineId}; batch_id={batchId}; quantity={quantity}");
             await audit.ExecuteNonQueryAsync();
         }
         transaction.Commit();
@@ -1478,7 +1478,7 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
             audit.Transaction = transaction;
             audit.CommandText = "INSERT INTO audit_log(action,entity,actor,details) VALUES('REFUND_RECORDED','invoice',$actor,$details);";
             audit.Parameters.AddWithValue("$actor", string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim());
-            audit.Parameters.AddWithValue("$details", $"payment_id={paymentId}; refund_id={refundId}; amount={amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}; method={method.Trim()}; reason={reason.Trim()}");
+            audit.Parameters.AddWithValue("$details", $"payment_id={paymentId}; refund_id={refundId}; amount={amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}; method={method.Trim()}");
             await audit.ExecuteNonQueryAsync();
         }
         transaction.Commit();
