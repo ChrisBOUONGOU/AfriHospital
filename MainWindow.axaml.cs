@@ -719,7 +719,8 @@ public partial class MainWindow : Window
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
             var path = await _database.CreateBackupAsync();
-            _content.Children.Add(Card(new TextBlock { Text = "Sauvegarde créée : " + path, TextWrapping = TextWrapping.Wrap, Foreground = Brush("#166534") }));
+            await _database.WriteAuditAsync("DATABASE_BACKUP_CREATED", "database", _currentUser?.Username, "Local SQLite backup created.");
+            _content.Children.Add(Card(new TextBlock { Text = "Sauvegarde créée : " + path, TextWrapping = Wrap, Foreground = Brush("#166534") }));
             SetStatus("Sauvegarde créée. Protégez ce fichier contre tout accès non autorisé.");
         });
 
@@ -733,6 +734,7 @@ public partial class MainWindow : Window
                 return;
             }
             var safetyCopy = await _database.RestoreBackupAsync(restorePath.Text.Trim());
+            await _database.WriteAuditAsync("DATABASE_RESTORED", "database", _currentUser?.Username, "Backup restored after integrity check; a safety copy was created.");
             await ShowDashboardAsync();
             SetStatus("Restauration terminée. Une copie de sécurité de l'ancienne base a été créée : " + safetyCopy);
         });
