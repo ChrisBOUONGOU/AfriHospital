@@ -148,6 +148,12 @@ Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
 Le projet exécutable desktop est `AfriHospital.csproj` à la racine. Le code métier est maintenant réparti en projets .NET distincts : `src/Domain/AfriHospital.Domain.csproj`, `src/Application/AfriHospital.Application.csproj` et `src/Infrastructure/AfriHospital.Infrastructure.csproj`. La suite xUnit s'exécute dans GitHub Actions ; le commit vérifié a compilé sans avertissement ni erreur et les 23 tests ont réussi. Le lancement interactif de l'interface graphique doit encore être vérifié manuellement sur Windows/Linux.
 
+### Compatibilité macOS
+
+Le dépôt inclut un workflow GitHub Actions qui publie des archives autonomes pour les Mac Intel (`osx-x64`) et Apple Silicon (`osx-arm64`). Après l'exécution du workflow **Publish AfriHospital for macOS**, récupérez l'archive correspondante dans les artefacts du workflow, décompressez-la et lancez l'exécutable depuis Terminal.
+
+**Important :** le projet cible actuellement .NET 10. La version de .NET 10 est officiellement prise en charge sur macOS 15 et versions ultérieures ; macOS 12 Monterey n'est donc pas une cible officiellement prise en charge, même si Avalonia 11 peut prendre en charge des versions plus anciennes de macOS. Le workflow produit et vérifie les paquets sur macOS 15, mais ne prouve pas leur compatibilité d'exécution sur macOS 12. La prise en charge garantie de Monterey nécessiterait une cible .NET compatible et des tests sur un Mac exécutant macOS 12.
+
 ### 1. Cloner le dépôt
 
 ```bash
