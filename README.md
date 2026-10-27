@@ -176,7 +176,7 @@ Le chemin exact dépendra de l'organisation réelle du dépôt.
 
 ## 🔐 Sécurité et confidentialité
 
-La protection des données médicales est une priorité de conception. Un écran de connexion, le parcours de création du premier administrateur et un écran administrateur de création de comptes sont maintenant connectés au service d'authentification. Les menus sont filtrés selon les rôles, et les événements de connexion/création de compte sont journalisés. Cette protection reste un premier niveau : les autorisations doivent encore être renforcées et testées. La base contient toujours deux schémas SQLite distincts.
+La protection des données médicales est une priorité de conception. Un écran de connexion, le parcours de création du premier administrateur et un écran administrateur de création de comptes sont maintenant connectés au service d'authentification. Les menus sont filtrés selon les rôles, et les événements de connexion/création de compte sont journalisés. Cette protection reste un premier niveau : les autorisations doivent encore être renforcées et testées. Les patients et consultations utilisent maintenant un pont de compatibilité entre les tables historiques et les tables GUID : les dépôts métier écrivent dans les tables historiques et la projection GUID est réconciliée de façon idempotente à l'initialisation et avant les lectures métier. Les tables historiques et leurs notes ne sont pas supprimées.
 
 Les mesures à prévoir comprennent :
 
@@ -228,8 +228,9 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Ajouter une fondation SQLite pour les nouvelles entités GUID et les comptes utilisateurs.
 - [x] Ajouter les interfaces de dépôt et dépôts SQLite pour les nouvelles entités.
 - [x] Ajouter le hachage PBKDF2-SHA256 et un service applicatif de vérification des identifiants.
-- [x] Importer de façon idempotente les patients et consultations historiques dans les tables GUID, avec identifiants de correspondance et sans modifier les enregistrements historiques.
-- [ ] Terminer l'unification des nouvelles tables domain_patients/domain_consultations avec les tables historiques utilisées par l'interface, y compris la synchronisation des écritures dans les deux sens.
+- [x] Importer de façon idempotente les patients et consultations historiques vers les tables GUID, en conservant les identifiants de correspondance et les tables sources.
+- [x] Unifier le stockage des patients et consultations : les dépôts métier écrivent dans les tables historiques partagées et réconcilient la projection GUID; les données historiques et les notes sont conservées.
+- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier au lieu du SQL intégré à MainWindow.
 - [x] Brancher la connexion à l'interface et créer un parcours de premier administrateur avec création atomique du premier compte.
 - [ ] Renforcer et tester les rôles et permissions dans chaque module (le filtrage initial des menus est en place).
 - [ ] Ajouter l'API ASP.NET Core si le mode multi-postes est retenu.
@@ -244,7 +245,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Étendre l'audit aux exports de reçus et aux futures opérations sensibles; définir les règles de conservation.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (17 tests réussis sur le commit de code vérifié).
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (19 tests réussis sur le commit de code vérifié).
 
 > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. En revanche, les nouvelles entités métier GUID et leurs dépôts SQLite ne sont pas encore unifiés avec les tables historiques utilisées par les modules existants.
 
@@ -433,7 +434,7 @@ The exact path depends on the repository's actual structure.
 
 ## 🔐 Security and Privacy
 
-Protecting medical data is a core design priority. A login screen, first-administrator setup, and an administrator user-creation screen are now connected to the authentication service. Navigation is filtered by role, and login/account-creation events are audited. This is an initial protection layer: permissions still need stronger enforcement and testing. The database still contains two separate SQLite schemas.
+Protecting medical data is a core design priority. A login screen, first-administrator setup, and an administrator user-creation screen are now connected to the authentication service. Navigation is filtered by role, and login/account-creation events are audited. This is an initial protection layer: permissions still need stronger enforcement and testing. Patients and consultations now use a compatibility bridge between the legacy tables and GUID tables: domain repositories write to the legacy tables, and the GUID projection is reconciled idempotently during initialization and before domain reads. Legacy tables and their notes are retained.
 
 Planned safeguards include:
 
@@ -485,8 +486,9 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Add SQLite foundations for the new GUID entities and user accounts.
 - [x] Add repository interfaces and SQLite repositories for the new entities.
 - [x] Add PBKDF2-SHA256 password hashing and an application service for credential verification.
-- [x] Idempotently import legacy patients and consultations into the GUID tables with mapping identifiers, without modifying historical source records.
-- [ ] Complete unification of domain_patients/domain_consultations with the legacy tables used by the UI, including synchronization of writes in both directions.
+- [x] Idempotently import legacy patients and consultations into the GUID tables, preserving mapping identifiers and source tables.
+- [x] Unify patient and consultation storage: domain repositories write to the shared legacy tables and reconcile the GUID projection; historical data and notes are retained.
+- [ ] Refactor the Avalonia UI to use the domain repositories directly instead of SQL embedded in MainWindow.
 - [x] Connect login to the UI and create a first-administrator setup flow that only works when no user account exists.
 - [ ] Strengthen and test role permissions in every module (initial role-based navigation filtering is in place).
 - [x] Add an administrator page to create accounts with predefined roles.
@@ -502,7 +504,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Extend auditing to receipt exports and future sensitive operations; define retention rules.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [x] Confirm a successful build and automated test run in GitHub Actions (17 tests pass on the verified code commit).
+- [x] Confirm a successful build and automated test run in GitHub Actions (19 tests pass on the verified code commit).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI, but the new GUID-based domain entities and repositories are not yet unified with the legacy tables used by existing modules.
 
