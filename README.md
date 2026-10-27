@@ -238,7 +238,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Tester la restauration sur plusieurs scénarios et automatiser les sauvegardes périodiques.
 - [ ] Chiffrer les données sensibles et les sauvegardes, sécuriser les secrets et les accès.
 - [x] Journaliser les connexions réussies/échouées et la création de comptes.
-- [x] Journaliser les opérations métier avec l'acteur connecté et des détails non cliniques, avec une page de consultation réservée à l'administrateur.
+- [x] Journaliser les opérations métier et les sauvegardes/restaurations avec l'acteur connecté et des détails non cliniques, avec une page de consultation réservée à l'administrateur.
 - [ ] Étendre et tester le journal d'audit sur toutes les opérations sensibles et protéger son intégrité.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
@@ -494,7 +494,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Test restoration scenarios and automate periodic backups.
 - [ ] Encrypt sensitive data and backups, and secure secrets and access.
 - [x] Audit successful/failed logins and user-account creation.
-- [x] Audit business operations with the signed-in actor and non-clinical details, with an administrator-only audit viewer.
+- [x] Audit business operations and database backup/restore actions with the signed-in actor and non-clinical details, with an administrator-only audit viewer.
 - [ ] Extend and test the audit log for every sensitive operation and protect its integrity.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
