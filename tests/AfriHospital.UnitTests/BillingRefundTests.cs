@@ -28,7 +28,7 @@ public sealed class BillingRefundTests : IDisposable
         var outstanding = Assert.Single(await _database.GetInvoiceChoicesAsync());
         Assert.Equal(75m, outstanding.Paid);
         Assert.Equal(100m, outstanding.Total);
-        Assert.Equal(75m, outstanding.Total - outstanding.Paid);
+        Assert.Equal(25m, outstanding.Total - outstanding.Paid);
         Assert.Contains("Partiellement payée", Assert.Single(await _database.GetRowsAsync(
             "SELECT status FROM invoices WHERE id=$id", r => r.GetString(0), ("$id", invoiceId))));
 
