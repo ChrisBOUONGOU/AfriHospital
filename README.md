@@ -255,7 +255,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Étendre l'audit aux exports de reçus et aux futures opérations sensibles; définir les règles de conservation.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (build sans avertissement ni erreur, 23 tests réussis sur le commit vérifié).
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (build sans avertissement ni erreur, 28 tests réussis sur le commit vérifié).
 
  > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. Le stockage des patients et consultations est unifié par un pont de compatibilité ; les écrans Patients et Consultations utilisent maintenant les dépôts métier. Le refactoring complet de l'interface n'est pas terminé : les autres modules utilisent encore `HospitalDatabase` et du SQL dans `MainWindow`.
 
