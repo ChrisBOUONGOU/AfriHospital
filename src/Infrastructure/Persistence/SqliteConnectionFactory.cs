@@ -47,6 +47,24 @@ public sealed class SqliteConnectionFactory
         await using var command = connection.CreateCommand();
         command.CommandText = """
             PRAGMA foreign_keys = ON;
+            CREATE TABLE IF NOT EXISTS patients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                phone TEXT NOT NULL DEFAULT '',
+                birth_date TEXT NOT NULL DEFAULT '',
+                gender TEXT NOT NULL DEFAULT '',
+                notes TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS consultations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NULL REFERENCES patients(id),
+                patient_name TEXT NOT NULL,
+                consulted_at TEXT NOT NULL,
+                clinician TEXT NOT NULL DEFAULT '',
+                summary TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
             CREATE TABLE IF NOT EXISTS domain_patients (
                 id TEXT PRIMARY KEY NOT NULL,
                 patient_number TEXT NOT NULL UNIQUE,
@@ -55,7 +73,8 @@ public sealed class SqliteConnectionFactory
                 date_of_birth TEXT NULL,
                 sex TEXT NULL,
                 phone_number TEXT NULL,
-                created_at_utc TEXT NOT NULL
+                created_at_utc TEXT NOT NULL,
+                legacy_patient_id INTEGER NULL UNIQUE
             );
             CREATE INDEX IF NOT EXISTS ix_domain_patients_name
                 ON domain_patients(last_name, first_name);
@@ -65,7 +84,8 @@ public sealed class SqliteConnectionFactory
                 practitioner_id TEXT NOT NULL,
                 consultation_date_utc TEXT NOT NULL,
                 clinical_notes TEXT NULL,
-                diagnosis TEXT NULL
+                diagnosis TEXT NULL,
+                legacy_consultation_id INTEGER NULL UNIQUE
             );
             CREATE INDEX IF NOT EXISTS ix_domain_consultations_patient_date
                 ON domain_consultations(patient_id, consultation_date_utc);
@@ -90,5 +110,22 @@ public sealed class SqliteConnectionFactory
                 BEFORE DELETE ON security_audit_log BEGIN SELECT RAISE(ABORT, 'security audit log is append-only'); END;
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await EnsureColumnAsync(connection, "domain_patients", "legacy_patient_id", "INTEGER NULL");
+        await EnsureColumnAsync(connection, "domain_consultations", "legacy_consultation_id", "INTEGER NULL");
+        await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
+    }
+
+    private static async Task EnsureColumnAsync(SqliteConnection connection, string table, string column, string definition)
+    {
+        await using var check = connection.CreateCommand();
+        check.CommandText = $"PRAGMA table_info({table})";
+        await using var reader = await check.ExecuteReaderAsync(cancellationToken: CancellationToken.None);
+        while (await reader.ReadAsync())
+            if (reader.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase))
+                return;
+        await reader.DisposeAsync();
+        await using var alter = connection.CreateCommand();
+        alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
+        await alter.ExecuteNonQueryAsync();
     }
 }
