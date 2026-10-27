@@ -61,6 +61,53 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Initialize_AddsMissingLegacyConsultationPatientIdBeforeImport()
+    {
+        await using (var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = _databasePath }.ToString()))
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE patients(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    phone TEXT NOT NULL DEFAULT '',
+                    birth_date TEXT NOT NULL DEFAULT '',
+                    gender TEXT NOT NULL DEFAULT '',
+                    notes TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE consultations(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    patient_name TEXT NOT NULL,
+                    consulted_at TEXT NOT NULL,
+                    clinician TEXT NOT NULL DEFAULT '',
+                    summary TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                INSERT INTO patients(id,name) VALUES(5,'Legacy Patient');
+                INSERT INTO consultations(id,patient_name,consulted_at,summary)
+                VALUES(9,'Legacy Patient','2023-01-01 09:00:00','Legacy note');
+                """;
+            await command.ExecuteNonQueryAsync();
+        }
+
+        var factory = new SqliteConnectionFactory(_databasePath);
+        await factory.InitializeAsync();
+
+        await using var check = factory.CreateConnection();
+        await check.OpenAsync();
+        await using var schema = check.CreateCommand();
+        schema.CommandText = "PRAGMA table_info(consultations)";
+        await using var reader = await schema.ExecuteReaderAsync();
+        var hasPatientId = false;
+        while (await reader.ReadAsync())
+            if (reader.GetString(1).Equals("patient_id", StringComparison.OrdinalIgnoreCase))
+                hasPatientId = true;
+        Assert.True(hasPatientId);
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_directory, recursive: true); }
