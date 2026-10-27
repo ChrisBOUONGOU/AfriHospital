@@ -11,6 +11,35 @@ namespace AfriHospital.src.Infrastructure.Repositories;
 /// </summary>
 public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory) : IConsultationRepository
 {
+    public async Task<IReadOnlyList<Consultation>> GetAllAsync(CancellationToken cancellationToken = default)
+    {
+        await factory.InitializeAsync(cancellationToken);
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync(cancellationToken);
+        await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
+
+        var items = new List<Consultation>();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT dc.id, dc.patient_id, dc.practitioner_id, dc.consultation_date_utc, dc.clinical_notes, dc.diagnosis, COALESCE(lc.clinician, '')
+            FROM domain_consultations dc LEFT JOIN consultations lc ON lc.id=dc.legacy_consultation_id
+            ORDER BY dc.consultation_date_utc DESC LIMIT 1000;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+            items.Add(new Consultation
+            {
+                Id = Guid.Parse(reader.GetString(0)),
+                PatientId = Guid.Parse(reader.GetString(1)),
+                PractitionerId = Guid.Parse(reader.GetString(2)),
+                ConsultationDateUtc = DateTime.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                ClinicalNotes = reader.IsDBNull(4) ? null : reader.GetString(4),
+                Diagnosis = reader.IsDBNull(5) ? null : reader.GetString(5),
+                PractitionerName = reader.IsDBNull(6) ? null : reader.GetString(6)
+            });
+        return items;
+    }
+
     public async Task<IReadOnlyList<Consultation>> GetForPatientAsync(Guid patientId, CancellationToken cancellationToken = default)
     {
         await factory.InitializeAsync(cancellationToken);
@@ -21,9 +50,9 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
         var items = new List<Consultation>();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, patient_id, practitioner_id, consultation_date_utc, clinical_notes, diagnosis
-            FROM domain_consultations WHERE patient_id=$patientId
-            ORDER BY consultation_date_utc DESC LIMIT 1000;
+            SELECT dc.id, dc.patient_id, dc.practitioner_id, dc.consultation_date_utc, dc.clinical_notes, dc.diagnosis, COALESCE(lc.clinician, '')
+            FROM domain_consultations dc LEFT JOIN consultations lc ON lc.id=dc.legacy_consultation_id
+            WHERE dc.patient_id=$patientId ORDER BY dc.consultation_date_utc DESC LIMIT 1000;
             """;
         command.Parameters.AddWithValue("$patientId", patientId.ToString("D"));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -35,7 +64,8 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
                 PractitionerId = Guid.Parse(reader.GetString(2)),
                 ConsultationDateUtc = DateTime.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                 ClinicalNotes = reader.IsDBNull(4) ? null : reader.GetString(4),
-                Diagnosis = reader.IsDBNull(5) ? null : reader.GetString(5)
+                Diagnosis = reader.IsDBNull(5) ? null : reader.GetString(5),
+                PractitionerName = reader.IsDBNull(6) ? null : reader.GetString(6)
             });
         return items;
     }
@@ -56,8 +86,10 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
         await using var practitioner = connection.CreateCommand();
         practitioner.CommandText = "SELECT username FROM hospital_users WHERE id=$id LIMIT 1;";
         practitioner.Parameters.AddWithValue("$id", consultation.PractitionerId.ToString("D"));
-        var clinician = await practitioner.ExecuteScalarAsync(cancellationToken) as string
-            ?? consultation.PractitionerId.ToString("D");
+        var clinician = !string.IsNullOrWhiteSpace(consultation.PractitionerName)
+            ? consultation.PractitionerName.Trim()
+            : await practitioner.ExecuteScalarAsync(cancellationToken) as string
+                ?? consultation.PractitionerId.ToString("D");
 
         await using var command = connection.CreateCommand();
         command.CommandText = """
