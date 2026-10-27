@@ -94,6 +94,37 @@ public sealed class AppointmentRepositoryTests : IDisposable
         await Assert.ThrowsAsync<ArgumentException>(() => repository.AddAsync(appointment));
     }
 
+
+    [Fact]
+    public async Task AppointmentRepository_RejectsInvalidDateReasonAndStatus()
+    {
+        var repository = new SqliteAppointmentRepository(new SqliteConnectionFactory(_databasePath));
+        var patientId = Guid.NewGuid();
+        var appointment = new Appointment
+        {
+            PatientId = patientId,
+            ScheduledAt = default,
+            Reason = "Contrôle",
+            Status = "Planifié"
+        };
+        await Assert.ThrowsAsync<ArgumentException>(() => repository.AddAsync(appointment));
+
+        appointment.ScheduledAt = new DateTime(2026, 11, 5, 9, 30, 0);
+        appointment.Reason = new string('x', 251);
+        await Assert.ThrowsAsync<ArgumentException>(() => repository.AddAsync(appointment));
+
+        appointment.Reason = "Contrôle";
+        appointment.Status = "Statut inconnu";
+        await Assert.ThrowsAsync<ArgumentException>(() => repository.UpdateAsync(new Appointment
+        {
+            Id = 1,
+            PatientId = patientId,
+            ScheduledAt = appointment.ScheduledAt,
+            Reason = appointment.Reason,
+            Status = appointment.Status
+        }));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_directory, recursive: true); }
