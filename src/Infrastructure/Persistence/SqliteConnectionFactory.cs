@@ -67,6 +67,16 @@ public sealed class SqliteConnectionFactory
                 summary TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            CREATE TABLE IF NOT EXISTS appointments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id INTEGER NULL REFERENCES patients(id),
+                patient_name TEXT NOT NULL,
+                scheduled_at TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT 'Planifié',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS ix_appointments_patient_date ON appointments(patient_id, scheduled_at);
             CREATE TABLE IF NOT EXISTS domain_patients (
                 id TEXT PRIMARY KEY NOT NULL,
                 patient_number TEXT NOT NULL UNIQUE,
