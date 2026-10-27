@@ -15,8 +15,9 @@ public static class ConsultationValidator
             throw new ArgumentException("Le patient et le professionnel doivent être identifiés.");
         if (consultation.ConsultationDateUtc == default)
             throw new ArgumentException("La date de consultation est obligatoire.");
-        if (consultation.ConsultationDateUtc.Kind == DateTimeKind.Utc &&
-            consultation.ConsultationDateUtc > DateTime.UtcNow.AddMinutes(5))
+        if (consultation.ConsultationDateUtc.Kind != DateTimeKind.Utc)
+            consultation.ConsultationDateUtc = DateTime.SpecifyKind(consultation.ConsultationDateUtc, DateTimeKind.Local).ToUniversalTime();
+        if (consultation.ConsultationDateUtc > DateTime.UtcNow)
             throw new ArgumentException("La date de consultation ne peut pas être dans le futur.");
         if (string.IsNullOrWhiteSpace(consultation.PractitionerName) ||
             consultation.PractitionerName.Trim().Length > MaxPractitionerNameLength)
