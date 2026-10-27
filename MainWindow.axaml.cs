@@ -156,6 +156,7 @@ public partial class MainWindow : Window
         AddProtectedNav(nav, "Pharmacie / Stocks", async () => await ShowMedicinesAsync());
         AddProtectedNav(nav, "Facturation", async () => await ShowInvoicesAsync());
         if (CanAccess("Utilisateurs")) AddNav(nav, "Utilisateurs", async () => await ShowUsersAsync());
+        if (CanAccess("Audit")) AddNav(nav, "Journal d'audit", async () => await ShowAuditAsync());
         if (CanAccess("Sauvegarde")) AddNav(nav, "Sauvegarde", async () => await ShowBackupAsync());
         var logout = new Button { Content = "Se déconnecter", HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.Transparent, Foreground = Brushes.White, Padding = new Thickness(12, 11), CornerRadius = new CornerRadius(7) };
         logout.Click += (_, _) => Logout();
@@ -242,6 +243,34 @@ public partial class MainWindow : Window
         Foreground = Brush("#171717"), FontWeight = FontWeight.SemiBold,
         CornerRadius = new CornerRadius(7)
     };
+
+    private async Task ShowAuditAsync()
+    {
+        if (!CanAccess("Audit"))
+        {
+            BeginPage("Accès refusé", "Seul un administrateur peut consulter le journal d'audit.");
+            return;
+        }
+
+        BeginPage("Journal d'audit", "Historique local des opérations métier et des événements de sécurité. Les informations médicales détaillées ne sont pas copiées dans ce journal.");
+        await _database.InitializeAsync();
+        var list = new ListBox { MinHeight = 420 };
+        list.ItemsSource = await _database.GetRowsAsync("""
+            SELECT created_at, actor, action, entity, details
+            FROM audit_log
+            UNION ALL
+            SELECT created_at_utc, actor, action, 'security', details
+            FROM security_audit_log
+            ORDER BY 1 DESC
+            LIMIT 500;
+            """,
+            r => $"{r.GetString(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} · {r.GetString(4)}");
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children =
+        {
+            Heading("Dernières opérations"), list,
+            new TextBlock { Text = "Le journal est local. Il ne remplace pas une stratégie de conservation, de sauvegarde et de protection contre la falsification.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#6B7280") }
+        }}));
+    }
 
     private async Task ShowUsersAsync()
     {
@@ -353,7 +382,7 @@ public partial class MainWindow : Window
                  birthDate > DateOnly.FromDateTime(DateTime.Today)))
             { SetStatus("Date de naissance invalide. Utilisez AAAA-MM-JJ et une date non future.", true); return; }
             await _database.SavePatientAsync(selectedId, name.Text.Trim(), phone.Text ?? "", birth.Text ?? "", gender.Text ?? "", notes.Text ?? "");
-            await _database.WriteAuditAsync(selectedId is null ? "PATIENT_CREATED" : "PATIENT_UPDATED", "patient");
+            await _database.WriteAuditAsync(selectedId is null ? "PATIENT_CREATED" : "PATIENT_UPDATED", "patient", _currentUser?.Username);
             selectedId = null; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = "";
             await Refresh(); SetStatus("Patient enregistré dans la base locale.");
         });
@@ -438,7 +467,7 @@ public partial class MainWindow : Window
             await _database.ExecuteAsync(
                 "INSERT INTO appointments(patient_id, patient_name, scheduled_at, reason, status) VALUES($id,$p,$d,$r,'Planifié')",
                 ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", formattedDate), ("$r", reason.Text?.Trim() ?? ""));
-            await _database.WriteAuditAsync("APPOINTMENT_CREATED", "appointment");
+            await _database.WriteAuditAsync("APPOINTMENT_CREATED", "appointment", _currentUser?.Username);
             selectedId = null; patients.SelectedItem = null; date.Text = reason.Text = ""; status.SelectedIndex = 0;
             await Refresh();
             SetStatus("Rendez-vous ajouté.");
@@ -463,7 +492,7 @@ public partial class MainWindow : Window
                 "UPDATE appointments SET patient_id=$patientId, patient_name=$patientName, scheduled_at=$date, reason=$reason, status=$status WHERE id=$id",
                 ("$patientId", selectedPatient.Id), ("$patientName", selectedPatient.Name), ("$date", formattedDate),
                 ("$reason", reason.Text?.Trim() ?? ""), ("$status", selectedStatus), ("$id", selectedId.Value));
-            await _database.WriteAuditAsync("APPOINTMENT_UPDATED", "appointment");
+            await _database.WriteAuditAsync("APPOINTMENT_UPDATED", "appointment", _currentUser?.Username);
             await Refresh();
             SetStatus("Rendez-vous modifié.");
         });
@@ -477,7 +506,7 @@ public partial class MainWindow : Window
                 return;
             }
             await _database.ExecuteAsync("UPDATE appointments SET status='Annulé' WHERE id=$id AND status <> 'Annulé'", ("$id", selectedId.Value));
-            await _database.WriteAuditAsync("APPOINTMENT_CANCELLED", "appointment");
+            await _database.WriteAuditAsync("APPOINTMENT_CANCELLED", "appointment", _currentUser?.Username);
             await Refresh();
             SetStatus("Rendez-vous annulé. Il reste dans l'historique.");
         });
@@ -517,7 +546,7 @@ public partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(clinician.Text) || string.IsNullOrWhiteSpace(summary.Text))
             { SetStatus("Le professionnel de santé et le résumé sont obligatoires.", true); return; }
             await _database.ExecuteAsync("INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary) VALUES($id,$p,$d,$c,$s)", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", consultedAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)), ("$c", clinician.Text.Trim()), ("$s", summary.Text.Trim()));
-            await _database.WriteAuditAsync("CONSULTATION_CREATED", "consultation");
+            await _database.WriteAuditAsync("CONSULTATION_CREATED", "consultation", _currentUser?.Username);
             patients.SelectedItem = null; date.Text = clinician.Text = summary.Text = ""; await Refresh(); SetStatus("Consultation enregistrée.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle consultation"), patients, date, clinician, summary, save } }));
@@ -607,7 +636,7 @@ public partial class MainWindow : Window
             { SetStatus("Le nom du médicament ou l'unité est trop long.", true); return; }
             var newId = await _database.AddMedicineAsync(name.Text.Trim(), initialQuantity,
                 string.IsNullOrWhiteSpace(unit.Text) ? "unité" : unit.Text.Trim(), sellPrice, min);
-            await _database.WriteAuditAsync("MEDICINE_CREATED", "medicine");
+            await _database.WriteAuditAsync("MEDICINE_CREATED", "medicine", _currentUser?.Username);
             name.Text = quantity.Text = threshold.Text = unit.Text = price.Text = "";
             await RefreshMedicines(newId);
             SetStatus(initialQuantity > 0
@@ -652,7 +681,7 @@ public partial class MainWindow : Window
             }
 
             await _database.RecordStockMovementAsync(selected.Id, inbound, movedQuantity, batch, expiryDate,
-                supplierName, cost, batchId, note.Text?.Trim() ?? "");
+                supplierName, cost, batchId, note.Text?.Trim() ?? "", _currentUser?.Username);
             movementQuantity.Text = note.Text = "";
             batchNumber.Text = expiry.Text = supplier.Text = unitCost.Text = "";
             await RefreshMedicines(selected.Id);
@@ -769,7 +798,7 @@ public partial class MainWindow : Window
             if (patient.Text.Trim().Length > 150 || (description.Text?.Length ?? 0) > 500)
             { SetStatus("Le nom du patient ou la description est trop long.", true); return; }
             await _database.ExecuteAsync("INSERT INTO invoices(patient_name, description, amount, currency, status) VALUES($p,$d,$a,$c,'À payer')", ("$p", patient.Text.Trim()), ("$d", description.Text ?? ""), ("$a", a), ("$c", currencyCode));
-            await _database.WriteAuditAsync("INVOICE_CREATED", "invoice");
+            await _database.WriteAuditAsync("INVOICE_CREATED", "invoice", _currentUser?.Username);
             patient.Text = description.Text = amount.Text = currency.Text = "";
             await Refresh();
             SetStatus("Facture créée.");
@@ -782,7 +811,7 @@ public partial class MainWindow : Window
                 !decimal.TryParse(paymentAmount.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var paid) ||
                 paid <= 0 || paymentMethod.SelectedItem is not string method)
             { SetStatus("Sélectionnez une facture, un montant positif et un moyen de paiement.", true); return; }
-            var paymentId = await _database.RecordPaymentAsync(selected.Id, paid, method);
+            var paymentId = await _database.RecordPaymentAsync(selected.Id, paid, method, _currentUser?.Username);
             invoiceChoice.SelectedItem = null;
             paymentAmount.Text = "";
             await Refresh();
@@ -814,7 +843,7 @@ public partial class MainWindow : Window
             { SetStatus("Sélectionnez un paiement, un montant positif, un moyen et un motif de remboursement.", true); return; }
             if (refundReason.Text.Trim().Length > 250)
             { SetStatus("Le motif du remboursement ne doit pas dépasser 250 caractères.", true); return; }
-            var refundId = await _database.RecordRefundAsync(selected.PaymentId, refunded, method, refundReason.Text.Trim());
+            var refundId = await _database.RecordRefundAsync(selected.PaymentId, refunded, method, refundReason.Text.Trim(), _currentUser?.Username);
             refundAmount.Text = refundReason.Text = "";
             await Refresh();
             try
@@ -903,8 +932,10 @@ CREATE TABLE IF NOT EXISTS refunds(
  refunded_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS ix_refunds_payment ON refunds(payment_id);
-CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);";
+CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, actor TEXT NOT NULL DEFAULT 'unknown', details TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);";
         await command.ExecuteNonQueryAsync();
+        await EnsureColumnAsync(connection, "audit_log", "actor", "TEXT NOT NULL DEFAULT 'unknown'");
+        await EnsureColumnAsync(connection, "audit_log", "details", "TEXT NOT NULL DEFAULT ''");
         // Preserve pre-existing quantities as a legacy batch; do not invent an expiry date.
         await using (var legacyBatches = connection.CreateCommand())
         {
@@ -1127,7 +1158,7 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
     }
 
     public async Task RecordStockMovementAsync(long medicineId, bool inbound, int quantity, string? batchNumber,
-        string? expiryDate, string? supplier, decimal unitCost, long? selectedBatchId, string note)
+        string? expiryDate, string? supplier, decimal unitCost, long? selectedBatchId, string note, string? actor = null)
     {
         if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity), "La quantité du mouvement doit être positive.");
         await using var connection = new SqliteConnection(ConnectionString);
@@ -1243,8 +1274,10 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using (var audit = connection.CreateCommand())
         {
             audit.Transaction = transaction;
-            audit.CommandText = "INSERT INTO audit_log(action,entity) VALUES($action,'medicine');";
+            audit.CommandText = "INSERT INTO audit_log(action,entity,actor,details) VALUES($action,'medicine',$actor,$details);";
             audit.Parameters.AddWithValue("$action", inbound ? "STOCK_IN" : "STOCK_OUT");
+            audit.Parameters.AddWithValue("$actor", string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim());
+            audit.Parameters.AddWithValue("$details", $"medicine_id={medicineId}; batch_id={batchId}; quantity={quantity}; note={note}");
             await audit.ExecuteNonQueryAsync();
         }
         transaction.Commit();
@@ -1272,7 +1305,7 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         return invoices;
     }
 
-    public async Task<long> RecordPaymentAsync(long invoiceId, decimal amount, string method)
+    public async Task<long> RecordPaymentAsync(long invoiceId, decimal amount, string method, string? actor = null)
     {
         if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount), "Le paiement doit être positif.");
         if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("Le moyen de paiement est obligatoire.", nameof(method));
@@ -1333,7 +1366,9 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using (var audit = connection.CreateCommand())
         {
             audit.Transaction = transaction;
-            audit.CommandText = "INSERT INTO audit_log(action, entity) VALUES('PAYMENT_RECORDED','invoice');";
+            audit.CommandText = "INSERT INTO audit_log(action, entity, actor, details) VALUES('PAYMENT_RECORDED','invoice',$actor,$details);";
+            audit.Parameters.AddWithValue("$actor", string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim());
+            audit.Parameters.AddWithValue("$details", $"invoice_id={invoiceId}; payment_id={paymentId}; amount={amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}; method={method.Trim()}");
             await audit.ExecuteNonQueryAsync();
         }
         transaction.Commit();
@@ -1362,7 +1397,7 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         return items;
     }
 
-    public async Task<long> RecordRefundAsync(long paymentId, decimal amount, string method, string reason)
+    public async Task<long> RecordRefundAsync(long paymentId, decimal amount, string method, string reason, string? actor = null)
     {
         if (amount <= 0) throw new ArgumentOutOfRangeException(nameof(amount), "Le remboursement doit être positif.");
         if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("Le moyen de remboursement est obligatoire.", nameof(method));
@@ -1441,7 +1476,9 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using (var audit = connection.CreateCommand())
         {
             audit.Transaction = transaction;
-            audit.CommandText = "INSERT INTO audit_log(action,entity) VALUES('REFUND_RECORDED','invoice');";
+            audit.CommandText = "INSERT INTO audit_log(action,entity,actor,details) VALUES('REFUND_RECORDED','invoice',$actor,$details);";
+            audit.Parameters.AddWithValue("$actor", string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim());
+            audit.Parameters.AddWithValue("$details", $"payment_id={paymentId}; refund_id={refundId}; amount={amount.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)}; method={method.Trim()}; reason={reason.Trim()}");
             await audit.ExecuteNonQueryAsync();
         }
         transaction.Commit();
@@ -1603,9 +1640,12 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         return Convert.ToInt64(await command.ExecuteScalarAsync()) != 0;
     }
 
-    public async Task WriteAuditAsync(string action, string entity)
+    public async Task WriteAuditAsync(string action, string entity, string? actor = null, string? details = null)
     {
-        await ExecuteAsync("INSERT INTO audit_log(action, entity) VALUES($action, $entity)", ("$action", action), ("$entity", entity));
+        await ExecuteAsync(
+            "INSERT INTO audit_log(action, entity, actor, details) VALUES($action, $entity, $actor, $details)",
+            ("$action", action), ("$entity", entity), ("$actor", string.IsNullOrWhiteSpace(actor) ? "unknown" : actor.Trim()),
+            ("$details", details ?? ""));
     }
 
     public async Task ExecuteAsync(string sql, params (string Name, object Value)[] parameters)
