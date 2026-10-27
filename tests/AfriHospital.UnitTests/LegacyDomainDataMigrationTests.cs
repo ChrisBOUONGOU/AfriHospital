@@ -139,10 +139,12 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
         }
 
         patient.PhoneNumber = "555-0101";
+        patient.PatientNumber = "AH-0002";
         await patients.UpdateAsync(patient);
         var found = await patients.GetByIdAsync(patient.Id);
         Assert.NotNull(found);
         Assert.Equal("555-0101", found!.PhoneNumber);
+        Assert.Equal("AH-0002", found.PatientNumber);
 
         var consultations = new SqliteConsultationRepository(factory);
         var practitionerId = Guid.NewGuid();
