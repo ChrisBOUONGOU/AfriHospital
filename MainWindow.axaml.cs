@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Data;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Microsoft.Data.Sqlite;
@@ -9,6 +10,7 @@ using AfriHospital.src.Domain.Entities;
 using AfriHospital.src.Infrastructure.Persistence;
 using AfriHospital.src.Infrastructure.Repositories;
 using AfriHospital.src.Infrastructure.Security;
+using AfriHospital.src.Desktop.ViewModels;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -18,6 +20,7 @@ namespace AfriHospital;
 
 public partial class MainWindow : Window
 {
+    private readonly MainWindowViewModel _viewModel = new();
     private readonly HospitalDatabase _database = new();
     private readonly SqliteConnectionFactory _connectionFactory = new();
     private readonly SqliteHospitalUserRepository _users;
@@ -33,6 +36,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        _pageTitle.Bind(TextBlock.TextProperty, new Binding(nameof(MainWindowViewModel.PageTitle)) { Source = _viewModel });
+        _status.Bind(TextBlock.TextProperty, new Binding(nameof(MainWindowViewModel.StatusMessage)) { Source = _viewModel });
         _users = new SqliteHospitalUserRepository(_connectionFactory);
         _patientRepository = new SqlitePatientRepository(_connectionFactory);
         _consultationRepository = new SqliteConsultationRepository(_connectionFactory);
@@ -212,14 +217,14 @@ public partial class MainWindow : Window
 
     private void BeginPage(string title, string description)
     {
-        _pageTitle.Text = title;
-        _status.Text = description;
+        _viewModel.PageTitle = title;
+        _viewModel.StatusMessage = description;
         _content.Children.Clear();
     }
 
     private void SetStatus(string text, bool error = false)
     {
-        _status.Text = text;
+        _viewModel.StatusMessage = text;
         _status.Foreground = Brush(error ? "#B91C1C" : "#6B7280");
     }
 
