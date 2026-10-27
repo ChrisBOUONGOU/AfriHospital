@@ -287,6 +287,7 @@ public partial class MainWindow : Window
 
     private async Task ShowDashboardAsync()
     {
+        if (!CanAccess("Tableau de bord")) { BeginPage("Accès refusé", "Veuillez vous connecter."); return; }
         BeginPage("Tableau de bord", "Vue d’ensemble — les données affichées proviennent de la base locale.");
         await _database.InitializeAsync();
         var counts = await _database.GetCountsAsync();
@@ -319,6 +320,7 @@ public partial class MainWindow : Window
 
     private async Task ShowPatientsAsync()
     {
+        if (!CanAccess("Patients")) { BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer les patients."); return; }
         BeginPage("Patients", "Créer, rechercher et modifier les dossiers administratifs de démonstration.");
         await _database.InitializeAsync();
         var name = Field("Nom complet *"); var phone = Field("Téléphone"); var birth = Field("Date de naissance (AAAA-MM-JJ)"); var gender = Field("Sexe (optionnel)"); var notes = Field("Notes administratives (optionnel)");
@@ -368,32 +370,138 @@ public partial class MainWindow : Window
 
     private async Task ShowAppointmentsAsync()
     {
-        BeginPage("Rendez-vous", "Planification simple — dates et heures à saisir au format local.");
+        if (!CanAccess("Rendez-vous"))
+        {
+            BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer les rendez-vous.");
+            return;
+        }
+
+        BeginPage("Rendez-vous", "Planification, modification, suivi du statut et annulation des rendez-vous.");
         await _database.InitializeAsync();
         var patients = new ComboBox { MinWidth = 260, PlaceholderText = "Sélectionner un patient" };
         patients.ItemsSource = await _database.GetPatientChoicesAsync();
-        var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var reason = Field("Motif du rendez-vous");
+        var date = Field("Date et heure (AAAA-MM-JJ HH:MM)");
+        var reason = Field("Motif du rendez-vous (250 caractères maximum)");
+        var status = new ComboBox { MinWidth = 260, ItemsSource = new[] { "Planifié", "Confirmé", "Arrivé", "Terminé", "Annulé" }, SelectedIndex = 0 };
         var list = new ListBox { MinHeight = 240 };
-        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT a.id, COALESCE(p.name, a.patient_name), a.scheduled_at, a.reason, a.status FROM appointments a LEFT JOIN patients p ON p.id = a.patient_id ORDER BY a.scheduled_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} · {r.GetString(4)}");
+        long? selectedId = null;
+
+        async Task Refresh()
+        {
+            list.ItemsSource = await _database.GetAppointmentsAsync();
+        }
+
+        list.SelectionChanged += (_, _) =>
+        {
+            if (list.SelectedItem is not AppointmentRow appointment) return;
+            selectedId = appointment.Id;
+            date.Text = appointment.ScheduledAt;
+            reason.Text = appointment.Reason;
+            status.SelectedItem = appointment.Status;
+            if (patients.ItemsSource is IEnumerable<PatientRow> patientRows)
+                patients.SelectedItem = patientRows.FirstOrDefault(p => p.Id == appointment.PatientId);
+        };
+
+        bool TryReadAppointment(out PatientRow selectedPatient, out string formattedDate)
+        {
+            selectedPatient = patients.SelectedItem as PatientRow ?? null!;
+            formattedDate = "";
+            if (selectedPatient is null || string.IsNullOrWhiteSpace(date.Text))
+            {
+                SetStatus("Sélectionnez un patient et indiquez la date.", true);
+                return false;
+            }
+            if (!DateTime.TryParseExact(date.Text.Trim(), new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd H:mm" },
+                System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var scheduledAt))
+            {
+                SetStatus("Date invalide. Format attendu : AAAA-MM-JJ HH:MM.", true);
+                return false;
+            }
+            if ((reason.Text?.Trim().Length ?? 0) > 250)
+            {
+                SetStatus("Le motif ne doit pas dépasser 250 caractères.", true);
+                return false;
+            }
+            formattedDate = scheduledAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+            return true;
+        }
+
         var save = ActionButton("Ajouter le rendez-vous");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
-            if (patients.SelectedItem is not PatientRow selectedPatient || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Sélectionnez un patient et indiquez la date.", true); return; }
-            if (!DateTime.TryParseExact(date.Text.Trim(), new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd H:mm" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var scheduledAt)) { SetStatus("Date invalide. Format attendu : AAAA-MM-JJ HH:MM.", true); return; }
-            var formattedDate = scheduledAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture);
-            if (await _database.ExistsAsync("SELECT EXISTS(SELECT 1 FROM appointments WHERE patient_id=$id AND scheduled_at=$d AND status <> 'Annulé')", ("$id", selectedPatient.Id), ("$d", formattedDate)))
-            { SetStatus("Ce patient possède déjà un rendez-vous à cette date et heure.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO appointments(patient_id, patient_name, scheduled_at, reason, status) VALUES($id,$p,$d,$r,'Planifié')", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", formattedDate), ("$r", reason.Text ?? ""));
+            if (!TryReadAppointment(out var selectedPatient, out var formattedDate)) return;
+            if (await _database.HasAppointmentConflictAsync(selectedPatient.Id, formattedDate))
+            {
+                SetStatus("Ce patient possède déjà un rendez-vous actif à cette date et heure.", true);
+                return;
+            }
+            await _database.ExecuteAsync(
+                "INSERT INTO appointments(patient_id, patient_name, scheduled_at, reason, status) VALUES($id,$p,$d,$r,'Planifié')",
+                ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", formattedDate), ("$r", reason.Text?.Trim() ?? ""));
             await _database.WriteAuditAsync("APPOINTMENT_CREATED", "appointment");
-            patients.SelectedItem = null; date.Text = reason.Text = ""; await Refresh(); SetStatus("Rendez-vous ajouté.");
+            selectedId = null; patients.SelectedItem = null; date.Text = reason.Text = ""; status.SelectedIndex = 0;
+            await Refresh();
+            SetStatus("Rendez-vous ajouté.");
         });
-        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouveau rendez-vous"), patients, date, reason, save } }));
+
+        var update = ActionButton("Enregistrer les modifications", false);
+        update.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (selectedId is null)
+            {
+                SetStatus("Sélectionnez un rendez-vous dans la liste avant de le modifier.", true);
+                return;
+            }
+            if (!TryReadAppointment(out var selectedPatient, out var formattedDate)) return;
+            if (await _database.HasAppointmentConflictAsync(selectedPatient.Id, formattedDate, selectedId))
+            {
+                SetStatus("Un autre rendez-vous actif existe déjà pour ce patient à cette date et heure.", true);
+                return;
+            }
+            var selectedStatus = status.SelectedItem as string ?? "Planifié";
+            await _database.ExecuteAsync(
+                "UPDATE appointments SET patient_id=$patientId, patient_name=$patientName, scheduled_at=$date, reason=$reason, status=$status WHERE id=$id",
+                ("$patientId", selectedPatient.Id), ("$patientName", selectedPatient.Name), ("$date", formattedDate),
+                ("$reason", reason.Text?.Trim() ?? ""), ("$status", selectedStatus), ("$id", selectedId.Value));
+            await _database.WriteAuditAsync("APPOINTMENT_UPDATED", "appointment");
+            await Refresh();
+            SetStatus("Rendez-vous modifié.");
+        });
+
+        var cancel = ActionButton("Annuler le rendez-vous", false);
+        cancel.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (selectedId is null)
+            {
+                SetStatus("Sélectionnez un rendez-vous à annuler.", true);
+                return;
+            }
+            await _database.ExecuteAsync("UPDATE appointments SET status='Annulé' WHERE id=$id AND status <> 'Annulé'", ("$id", selectedId.Value));
+            await _database.WriteAuditAsync("APPOINTMENT_CANCELLED", "appointment");
+            await Refresh();
+            SetStatus("Rendez-vous annulé. Il reste dans l'historique.");
+        });
+
+        var clear = ActionButton("Nouveau / Effacer", false);
+        clear.Click += (_, _) =>
+        {
+            selectedId = null; patients.SelectedItem = null; date.Text = reason.Text = "";
+            status.SelectedIndex = 0; list.SelectedItem = null;
+        };
+
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            Heading("Rendez-vous"), patients, date, reason, status,
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { save, update } },
+            new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { cancel, clear } }
+        }}));
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Rendez-vous enregistrés"), list } }));
         await Refresh();
     }
 
     private async Task ShowConsultationsAsync()
     {
+        if (!CanAccess("Consultations")) { BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer les consultations."); return; }
         BeginPage("Consultations", "Enregistrement administratif des consultations. Les décisions médicales doivent rester sous responsabilité d’un professionnel.");
         await _database.InitializeAsync();
         var patients = new ComboBox { MinWidth = 260, PlaceholderText = "Sélectionner un patient" };
@@ -419,6 +527,7 @@ public partial class MainWindow : Window
 
     private async Task ShowMedicinesAsync()
     {
+        if (!CanAccess("Pharmacie / Stocks")) { BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer la pharmacie."); return; }
         BeginPage("Pharmacie et stocks", "Catalogue minimal et suivi des quantités. La gestion des lots, péremptions et dispensations devra être ajoutée avant utilisation réelle.");
         await _database.InitializeAsync();
         var name = Field("Nom du médicament"); var quantity = Field("Quantité en stock"); var threshold = Field("Seuil d’alerte"); var unit = Field("Unité (boîte, flacon…)"); var price = Field("Prix unitaire (nombre)");
@@ -491,6 +600,7 @@ public partial class MainWindow : Window
 
     private async Task ShowInvoicesAsync()
     {
+        if (!CanAccess("Facturation")) { BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer la facturation."); return; }
         BeginPage("Facturation", "Suivi simple des factures et enregistrement des paiements. Les règles fiscales doivent être configurées pour chaque pays.");
         await _database.InitializeAsync();
         var patient = Field("Nom du patient");
@@ -608,6 +718,44 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using var alter = connection.CreateCommand();
         alter.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {definition}";
         await alter.ExecuteNonQueryAsync();
+    }
+
+    public async Task<bool> HasAppointmentConflictAsync(long patientId, string scheduledAt, long? excludingAppointmentId = null)
+    {
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1 FROM appointments
+                WHERE patient_id=$patientId AND scheduled_at=$scheduledAt
+                  AND status <> 'Annulé'
+                  AND ($excludeId IS NULL OR id <> $excludeId)
+            );
+            """;
+        command.Parameters.AddWithValue("$patientId", patientId);
+        command.Parameters.AddWithValue("$scheduledAt", scheduledAt);
+        command.Parameters.AddWithValue("$excludeId", (object?)excludingAppointmentId ?? DBNull.Value);
+        return Convert.ToInt64(await command.ExecuteScalarAsync()) != 0;
+    }
+
+    public async Task<List<AppointmentRow>> GetAppointmentsAsync()
+    {
+        var rows = new List<AppointmentRow>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT a.id, COALESCE(a.patient_id, 0), COALESCE(p.name, a.patient_name),
+                   a.scheduled_at, a.reason, a.status
+            FROM appointments a LEFT JOIN patients p ON p.id=a.patient_id
+            ORDER BY a.scheduled_at DESC, a.id DESC;
+            """;
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            rows.Add(new AppointmentRow(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2),
+                reader.GetString(3), reader.GetString(4), reader.GetString(5)));
+        return rows;
     }
 
     public async Task<List<PatientRow>> GetPatientChoicesAsync()
@@ -872,6 +1020,11 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         else
             await ExecuteAsync("UPDATE patients SET name=$n, phone=$p, birth_date=$b, gender=$g, notes=$notes WHERE id=$id", ("$n", name), ("$p", phone), ("$b", birthDate), ("$g", gender), ("$notes", notes), ("$id", id.Value));
     }
+}
+
+internal sealed record AppointmentRow(long Id, long PatientId, string PatientName, string ScheduledAt, string Reason, string Status)
+{
+    public override string ToString() => $"#{Id} · {PatientName} · {ScheduledAt} · {Reason} · {Status}";
 }
 
 internal sealed record PatientRow(long Id, string Name, string Phone, string BirthDate, string Gender, string Notes)
