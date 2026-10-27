@@ -146,7 +146,7 @@ Le fonctionnement hors ligne avec synchronisation entre plusieurs appareils néc
 
 Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
-Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite de tests xUnit est présente et exécutée dans GitHub Actions ; le dernier résultat vérifié pour le code était une compilation réussie et 4 tests réussis.
+Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite de tests xUnit est présente et exécutée dans GitHub Actions ; le dernier résultat vérifié pour le code était une compilation réussie et 8 tests réussis.
 
 ### 1. Cloner le dépôt
 
@@ -215,7 +215,8 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Ajouter les admissions, files d'attente et orientation vers les services.
 - [ ] Développer les admissions/sorties, séjours, chambres et lits.
 - [x] Ajouter un catalogue simple de médicaments, les quantités et les alertes de stock faible.
-- [ ] Ajouter les mouvements de stock, lots, fournisseurs et dates de péremption.
+- [x] Gérer les lots, numéros de lot, fournisseurs, dates de péremption et mouvements d'entrée/sortie du stock, avec conservation du stock historique sans date inventée.
+- [x] Tester les mouvements de stock, les quantités de lots et le rejet des péremptions passées avec xUnit.
 - [ ] Ajouter les demandes d'analyses et les résultats de laboratoire.
 - [x] Créer et afficher des factures simples avec devise configurable.
 - [x] Enregistrer des paiements partiels ou complets et calculer le solde restant.
@@ -240,7 +241,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Étendre et tester le journal d'audit sur toutes les opérations sensibles.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (4 tests réussis sur le commit de code vérifié).
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (8 tests réussis sur le commit de code vérifié).
 
 > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. En revanche, les nouvelles entités métier GUID et leurs dépôts SQLite ne sont pas encore unifiés avec les tables historiques utilisées par les modules existants.
 
@@ -468,7 +469,8 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Add admissions, waiting lists, and routing to departments.
 - [ ] Implement inpatient admission/discharge, stays, rooms, and beds.
 - [x] Add a basic medication catalog, quantities, and low-stock alerts.
-- [ ] Add stock movements, batches, suppliers, and expiration dates.
+- [x] Track batches, batch numbers, suppliers, expiry dates, and stock-in/stock-out movements while preserving legacy stock without inventing expiry dates.
+- [x] Test stock movements, batch quantities, and rejection of past expiry dates with xUnit.
 - [ ] Add laboratory test requests and results.
 - [x] Create and display basic invoices with a configurable currency.
 - [x] Record partial/full payments and calculate outstanding balances.
@@ -494,7 +496,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Extend and test the audit log for all sensitive operations.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [x] Confirm a successful build and automated test run in GitHub Actions (4 tests pass on the current code).
+- [x] Confirm a successful build and automated test run in GitHub Actions (8 tests pass on the verified code commit).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI, but the new GUID-based domain entities and repositories are not yet unified with the legacy tables used by existing modules.
 
