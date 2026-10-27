@@ -938,6 +938,16 @@ CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, actio
         await command.ExecuteNonQueryAsync();
         await EnsureColumnAsync(connection, "audit_log", "actor", "TEXT NOT NULL DEFAULT 'unknown'");
         await EnsureColumnAsync(connection, "audit_log", "details", "TEXT NOT NULL DEFAULT ''");
+        await using (var auditProtection = connection.CreateCommand())
+        {
+            auditProtection.CommandText = """
+                CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_update
+                BEFORE UPDATE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
+                CREATE TRIGGER IF NOT EXISTS trg_audit_log_no_delete
+                BEFORE DELETE ON audit_log BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
+                """;
+            await auditProtection.ExecuteNonQueryAsync();
+        }
         // Preserve pre-existing quantities as a legacy batch; do not invent an expiry date.
         await using (var legacyBatches = connection.CreateCommand())
         {
