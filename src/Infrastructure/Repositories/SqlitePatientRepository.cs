@@ -80,7 +80,7 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
     {
         ArgumentNullException.ThrowIfNull(patient);
         if (patient.Id == Guid.Empty) throw new ArgumentException("L'identifiant du patient est invalide.");
-        Validate(patient);
+        PatientValidator.Validate(patient);
         await EnsureReadyAsync(cancellationToken);
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
