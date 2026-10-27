@@ -172,6 +172,51 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
         Assert.Contains(history, item => item.Id == consultation.Id);
     }
 
+    [Fact]
+    public async Task Initialize_ExportsExistingGuidOnlyRecordsToSharedLegacyTables()
+    {
+        var factory = new SqliteConnectionFactory(_databasePath);
+        await factory.InitializeAsync();
+        var patientId = Guid.NewGuid();
+        var consultationId = Guid.NewGuid();
+        var practitionerId = Guid.NewGuid();
+
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO domain_patients(id,patient_number,first_name,last_name,date_of_birth,sex,phone_number,created_at_utc)
+                VALUES($patient,'GUID-0001','Sara','Martin','1988-06-07','F','555-0200','2022-03-04T00:00:00.0000000Z');
+                INSERT INTO domain_consultations(id,patient_id,practitioner_id,consultation_date_utc,clinical_notes,diagnosis)
+                VALUES($consultation,$patient,$practitioner,'2023-04-05T12:00:00.0000000Z','Douleur abdominale','Gastrite');
+                """;
+            command.Parameters.AddWithValue("$patient", patientId.ToString("D"));
+            command.Parameters.AddWithValue("$consultation", consultationId.ToString("D"));
+            command.Parameters.AddWithValue("$practitioner", practitionerId.ToString("D"));
+            await command.ExecuteNonQueryAsync();
+        }
+
+        await factory.InitializeAsync();
+
+        await using var verify = factory.CreateConnection();
+        await verify.OpenAsync();
+        await using var query = verify.CreateCommand();
+        query.CommandText = """
+            SELECT
+                (SELECT COUNT(*) FROM patients WHERE patient_number='GUID-0001' AND name='Sara Martin'),
+                (SELECT COUNT(*) FROM consultations WHERE summary LIKE '%Douleur abdominale%' AND summary LIKE '%Gastrite%'),
+                (SELECT id FROM domain_patients WHERE patient_number='GUID-0001'),
+                (SELECT id FROM domain_consultations WHERE legacy_consultation_id=(SELECT id FROM consultations WHERE summary LIKE '%Gastrite%'));
+            """;
+        await using var reader = await query.ExecuteReaderAsync();
+        Assert.True(await reader.ReadAsync());
+        Assert.Equal(1L, reader.GetInt64(0));
+        Assert.Equal(1L, reader.GetInt64(1));
+        Assert.Equal(patientId.ToString("D"), reader.GetString(2));
+        Assert.Equal(consultationId.ToString("D"), reader.GetString(3));
+    }
+
     public void Dispose()
     {
         try { Directory.Delete(_directory, recursive: true); }
