@@ -241,7 +241,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Étendre et tester le journal d'audit sur toutes les opérations sensibles.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (8 tests réussis sur le commit de code vérifié).
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (11 tests réussis sur le commit de code vérifié).
 
 > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. En revanche, les nouvelles entités métier GUID et leurs dépôts SQLite ne sont pas encore unifiés avec les tables historiques utilisées par les modules existants.
 
@@ -496,7 +496,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Extend and test the audit log for all sensitive operations.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [x] Confirm a successful build and automated test run in GitHub Actions (8 tests pass on the verified code commit).
+- [x] Confirm a successful build and automated test run in GitHub Actions (11 tests pass on the verified code commit).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI, but the new GUID-based domain entities and repositories are not yet unified with the legacy tables used by existing modules.
 
