@@ -63,6 +63,7 @@ public sealed class SqliteConnectionFactory
                 patient_name TEXT NOT NULL,
                 consulted_at TEXT NOT NULL,
                 clinician TEXT NOT NULL DEFAULT '',
+                practitioner_id TEXT NULL,
                 summary TEXT NOT NULL DEFAULT '',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
@@ -113,6 +114,7 @@ public sealed class SqliteConnectionFactory
         await command.ExecuteNonQueryAsync(cancellationToken);
         await EnsureColumnAsync(connection, "patients", "patient_number", "TEXT NOT NULL DEFAULT ''");
         await EnsureColumnAsync(connection, "consultations", "patient_id", "INTEGER NULL REFERENCES patients(id)");
+        await EnsureColumnAsync(connection, "consultations", "practitioner_id", "TEXT NULL");
         await EnsureColumnAsync(connection, "domain_patients", "legacy_patient_id", "INTEGER NULL");
         await EnsureColumnAsync(connection, "domain_consultations", "legacy_consultation_id", "INTEGER NULL");
         await using (var migrationIndexes = connection.CreateCommand())
