@@ -66,16 +66,16 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
             FROM domain_patients p
             JOIN patients legacy ON legacy.id=p.legacy_patient_id
             WHERE p.id=$patientId AND p.legacy_patient_id IS NOT NULL;
-            SELECT last_insert_rowid();
             """;
         command.Parameters.AddWithValue("$date", consultation.ConsultationDateUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$clinician", clinician);
         command.Parameters.AddWithValue("$summary", CombineNotes(consultation.ClinicalNotes, consultation.Diagnosis));
         command.Parameters.AddWithValue("$patientId", consultation.PatientId.ToString("D"));
-        var result = await command.ExecuteScalarAsync(cancellationToken);
-        if (result is null || result is DBNull)
+        if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
             throw new KeyNotFoundException("Le patient lié à cette consultation est introuvable.");
-        var legacyId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+        await using var idCommand = connection.CreateCommand();
+        idCommand.CommandText = "SELECT last_insert_rowid();";
+        var legacyId = Convert.ToInt64(await idCommand.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
         await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
         await using var lookup = connection.CreateCommand();
         lookup.CommandText = "SELECT id FROM domain_consultations WHERE legacy_consultation_id=$legacyId;";
