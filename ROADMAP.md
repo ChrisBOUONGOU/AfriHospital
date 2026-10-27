@@ -66,6 +66,6 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
-- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (8 tests xUnit réussis sur le commit de code vérifié).
+- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (11 tests xUnit réussis sur le commit de code vérifié).
 
 > **Avertissement :** ce projet reste un prototype de développement. L'écran de connexion, le parcours de création du premier administrateur et la création de comptes sont reliés au service d'authentification, et les menus sont filtrés selon le rôle. Les permissions ne sont toutefois pas encore renforcées et testées dans chaque module. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
