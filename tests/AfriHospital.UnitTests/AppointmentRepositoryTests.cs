@@ -60,7 +60,8 @@ public sealed class AppointmentRepositoryTests : IDisposable
         await repository.UpdateAsync(saved);
 
         Assert.False(await repository.HasConflictAsync(patient.Id, scheduledAt));
-        Assert.True(await repository.HasConflictAsync(patient.Id, updatedDate, saved.Id));
+        Assert.True(await repository.HasConflictAsync(patient.Id, updatedDate));
+        Assert.False(await repository.HasConflictAsync(patient.Id, updatedDate, saved.Id));
         var updated = Assert.Single(await repository.GetAllAsync(), item => item.Id == saved.Id);
         Assert.Equal("Suivi modifié", updated.Reason);
         Assert.Equal("Confirmé", updated.Status);
