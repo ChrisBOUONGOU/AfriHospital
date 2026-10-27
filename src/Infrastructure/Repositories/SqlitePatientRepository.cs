@@ -59,10 +59,12 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         command.CommandText = """
             INSERT INTO patients(name, patient_number, phone, birth_date, gender, notes, created_at)
             VALUES($name, $number, $phone, $birth, $sex, '', $created);
-            SELECT last_insert_rowid();
             """;
         BindLegacyPatient(command, patient);
-        var legacyId = Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+        await using var idCommand = connection.CreateCommand();
+        idCommand.CommandText = "SELECT last_insert_rowid();";
+        var legacyId = Convert.ToInt64(await idCommand.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
         await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
         await using var lookup = connection.CreateCommand();
         lookup.CommandText = "SELECT id FROM domain_patients WHERE legacy_patient_id=$legacyId;";
