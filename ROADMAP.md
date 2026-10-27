@@ -8,8 +8,8 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Créer le tableau de bord avec statistiques calculées depuis la base locale.
 - [x] Ajouter un menu latéral pour les modules.
 - [x] Distinguer les alertes de stock faible.
-- [x] Restaurer les dépendances et compiler le projet via GitHub Actions (build réussi sur le commit de code vérifié).
-- [ ] Lancer l'application et vérifier le rendu sur Windows/Linux.
+- [x] Restaurer et compiler le projet desktop ainsi que les projets Domain/Application/Infrastructure via GitHub Actions (0 avertissement, 0 erreur).
+- [ ] Lancer l'interface graphique et vérifier visuellement le rendu sur Windows/Linux (validation manuelle non réalisée par le CI headless).
 - [ ] Vérifier l'affichage sur petits écrans et l'accessibilité.
 
 ## Étape 2 — Gestion des patients
@@ -71,6 +71,6 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
-- [x] Confirmer un build et une exécution de tests réussis après le refactoring partiel de l'interface (19 tests xUnit réussis, build sans avertissement ni erreur).
+- [x] Confirmer le build et les tests après séparation des projets et ajout du socle MVVM (23 tests xUnit réussis, build sans avertissement ni erreur).
 
 > **Avertissement :** ce projet reste un prototype de développement. Les écrans Patients et Consultations passent maintenant par les dépôts métier, mais le refactoring global n'est pas terminé et d'autres modules utilisent encore du SQL dans `MainWindow`. L'écran de connexion et le filtrage initial des menus sont en place ; les permissions ne sont toutefois pas encore renforcées et testées dans chaque module. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
