@@ -20,8 +20,8 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, patient_number, first_name, last_name, date_of_birth, sex, phone_number, created_at_utc
-            FROM domain_patients WHERE id=$id;
+            SELECT dp.id, dp.patient_number, dp.first_name, dp.last_name, dp.date_of_birth, dp.sex, dp.phone_number, dp.created_at_utc, COALESCE(lp.notes, '')
+            FROM domain_patients dp LEFT JOIN patients lp ON lp.id=dp.legacy_patient_id WHERE dp.id=$id;
             """;
         command.Parameters.AddWithValue("$id", id.ToString("D"));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -37,10 +37,10 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         var patients = new List<Patient>();
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, patient_number, first_name, last_name, date_of_birth, sex, phone_number, created_at_utc
-            FROM domain_patients
-            WHERE patient_number LIKE $query OR first_name LIKE $query OR last_name LIKE $query OR phone_number LIKE $query
-            ORDER BY last_name, first_name LIMIT 500;
+            SELECT dp.id, dp.patient_number, dp.first_name, dp.last_name, dp.date_of_birth, dp.sex, dp.phone_number, dp.created_at_utc, COALESCE(lp.notes, '')
+            FROM domain_patients dp LEFT JOIN patients lp ON lp.id=dp.legacy_patient_id
+            WHERE dp.patient_number LIKE $query OR dp.first_name LIKE $query OR dp.last_name LIKE $query OR dp.phone_number LIKE $query OR lp.name LIKE $query
+            ORDER BY dp.last_name, dp.first_name LIMIT 500;
             """;
         command.Parameters.AddWithValue("$query", $"%{query.Trim()}%");
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -58,7 +58,7 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         await using var command = connection.CreateCommand();
         command.CommandText = """
             INSERT INTO patients(name, patient_number, phone, birth_date, gender, notes, created_at)
-            VALUES($name, $number, $phone, $birth, $sex, '', $created);
+            VALUES($name, $number, $phone, $birth, $sex, $notes, $created);
             """;
         BindLegacyPatient(command, patient);
         await command.ExecuteNonQueryAsync(cancellationToken);
@@ -88,7 +88,7 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE patients SET name=$name, patient_number=$number, phone=$phone,
-                birth_date=$birth, gender=$sex WHERE id=(
+                birth_date=$birth, gender=$sex, notes=$notes WHERE id=(
                     SELECT legacy_patient_id FROM domain_patients WHERE id=$id
                 );
             """;
@@ -116,6 +116,7 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         command.Parameters.AddWithValue("$phone", (object?)patient.PhoneNumber ?? "");
         command.Parameters.AddWithValue("$birth", patient.DateOfBirth?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "");
         command.Parameters.AddWithValue("$sex", (object?)patient.Sex ?? "");
+        command.Parameters.AddWithValue("$notes", (object?)patient.Notes ?? "");
         command.Parameters.AddWithValue("$created", (patient.CreatedAtUtc == default ? DateTime.UtcNow : patient.CreatedAtUtc.ToUniversalTime())
             .ToString("O", CultureInfo.InvariantCulture));
     }
@@ -129,6 +130,7 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
         DateOfBirth = reader.IsDBNull(4) ? null : DateOnly.ParseExact(reader.GetString(4), "yyyy-MM-dd", CultureInfo.InvariantCulture),
         Sex = reader.IsDBNull(5) ? null : reader.GetString(5),
         PhoneNumber = reader.IsDBNull(6) ? null : reader.GetString(6),
-        CreatedAtUtc = DateTime.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind)
+        CreatedAtUtc = DateTime.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+        Notes = reader.IsDBNull(8) ? null : reader.GetString(8)
     };
 }
