@@ -1,4 +1,5 @@
 using AfriHospital;
+using AfriHospital.src.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
 using Xunit;
 
@@ -26,6 +27,39 @@ public sealed class AuditLogTests : IDisposable
             "SELECT actor || '|' || action || '|' || entity || '|' || details FROM audit_log",
             reader => reader.GetString(0)));
         Assert.Equal("billing-user|INVOICE_CREATED|invoice|invoice_id=12", row);
+    }
+
+    [Fact]
+    public async Task BusinessAuditLog_RejectsUpdatesAndDeletes()
+    {
+        var database = new HospitalDatabase(_databasePath);
+        await database.InitializeAsync();
+        await database.WriteAuditAsync("INVOICE_CREATED", "invoice", "billing-user", "invoice_id=12");
+
+        await Assert.ThrowsAsync<SqliteException>(() => database.ExecuteAsync("UPDATE audit_log SET details='tampered'"));
+        await Assert.ThrowsAsync<SqliteException>(() => database.ExecuteAsync("DELETE FROM audit_log"));
+
+        var row = Assert.Single(await database.GetRowsAsync(
+            "SELECT details FROM audit_log", reader => reader.GetString(0)));
+        Assert.Equal("invoice_id=12", row);
+    }
+
+    [Fact]
+    public async Task SecurityAuditLog_RejectsUpdatesAndDeletes()
+    {
+        var factory = new SqliteConnectionFactory(_databasePath);
+        await factory.InitializeAsync();
+        await factory.WriteAuditAsync("admin", "LOGIN_SUCCESS", "test");
+
+        await using var connection = factory.CreateConnection();
+        await connection.OpenAsync();
+        await using var update = connection.CreateCommand();
+        update.CommandText = "UPDATE security_audit_log SET details='tampered'";
+        await Assert.ThrowsAsync<SqliteException>(async () => await update.ExecuteNonQueryAsync());
+
+        await using var delete = connection.CreateCommand();
+        delete.CommandText = "DELETE FROM security_audit_log";
+        await Assert.ThrowsAsync<SqliteException>(async () => await delete.ExecuteNonQueryAsync());
     }
 
     [Fact]
