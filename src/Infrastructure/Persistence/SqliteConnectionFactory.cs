@@ -50,6 +50,7 @@ public sealed class SqliteConnectionFactory
             CREATE TABLE IF NOT EXISTS patients (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
+                patient_number TEXT NOT NULL DEFAULT '',
                 phone TEXT NOT NULL DEFAULT '',
                 birth_date TEXT NOT NULL DEFAULT '',
                 gender TEXT NOT NULL DEFAULT '',
@@ -110,6 +111,7 @@ public sealed class SqliteConnectionFactory
                 BEFORE DELETE ON security_audit_log BEGIN SELECT RAISE(ABORT, 'security audit log is append-only'); END;
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await EnsureColumnAsync(connection, "patients", "patient_number", "TEXT NOT NULL DEFAULT ''");
         await EnsureColumnAsync(connection, "consultations", "patient_id", "INTEGER NULL REFERENCES patients(id)");
         await EnsureColumnAsync(connection, "domain_patients", "legacy_patient_id", "INTEGER NULL");
         await EnsureColumnAsync(connection, "domain_consultations", "legacy_consultation_id", "INTEGER NULL");
