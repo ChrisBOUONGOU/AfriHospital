@@ -43,5 +43,13 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="tests/**/*.cs" />
+    <Compile Remove="src/Domain/**/*.cs" />
+    <Compile Remove="src/Infrastructure/**/*.cs" />
+    <Compile Remove="src/Application/**/*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="src/Domain/AfriHospital.Domain.csproj" />
+    <ProjectReference Include="src/Infrastructure/AfriHospital.Infrastructure.csproj" />
+    <ProjectReference Include="src/Application/AfriHospital.Application.csproj" />
   </ItemGroup>
 </Project>
