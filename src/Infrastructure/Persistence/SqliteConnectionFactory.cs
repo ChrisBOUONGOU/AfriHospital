@@ -110,8 +110,17 @@ public sealed class SqliteConnectionFactory
                 BEFORE DELETE ON security_audit_log BEGIN SELECT RAISE(ABORT, 'security audit log is append-only'); END;
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+        await EnsureColumnAsync(connection, "consultations", "patient_id", "INTEGER NULL REFERENCES patients(id)");
         await EnsureColumnAsync(connection, "domain_patients", "legacy_patient_id", "INTEGER NULL");
         await EnsureColumnAsync(connection, "domain_consultations", "legacy_consultation_id", "INTEGER NULL");
+        await using (var migrationIndexes = connection.CreateCommand())
+        {
+            migrationIndexes.CommandText = """
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_domain_patients_legacy_id ON domain_patients(legacy_patient_id);
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_domain_consultations_legacy_id ON domain_consultations(legacy_consultation_id);
+                """;
+            await migrationIndexes.ExecuteNonQueryAsync(cancellationToken);
+        }
         await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
     }
 
