@@ -205,6 +205,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Enregistrer et afficher les consultations.
 - [x] Relier les consultations et rendez-vous aux patients sélectionnés dans le schéma historique.
 - [x] Valider le format de date et d'heure des rendez-vous et consultations.
+- [x] Gérer les statuts des rendez-vous, leur modification, leur annulation et les conflits horaires exacts par patient.
 - [ ] Compléter les validations métier des champs et des dates.
 - [x] Ajouter et exécuter les premiers tests automatisés d'authentification.
 - [ ] Étendre la couverture aux modules métier.
@@ -457,6 +458,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Record and display consultations.
 - [x] Link consultations and appointments to selected patients in the legacy schema.
 - [x] Validate appointment and consultation date/time formats.
+- [x] Manage appointment statuses, editing, cancellation, and exact-time conflicts for the same patient.
 - [ ] Complete business validation for fields and dates.
 - [x] Add and run initial automated authentication tests.
 - [ ] Extend test coverage to business modules.
