@@ -163,6 +163,9 @@ internal static class UiText
         ["Enregistrer un paiement"] = "Record a payment",
         ["Rembourser un paiement"] = "Refund a payment",
         ["Factures et montants nets encaissés"] = "Invoices and net amounts collected",
+        ["Rendez-vous enregistrés"] = "Saved appointments",
+        ["Créer une sauvegarde"] = "Create backup",
+        ["Sauvegarde créée : "] = "Backup created: ",
     };
 
     public static string Language { get; private set; } = "fr";
