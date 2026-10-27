@@ -51,7 +51,8 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Ajouter un hachage de mot de passe PBKDF2-SHA256 avec sel aléatoire et comparaison en temps constant.
 - [x] Ajouter un service applicatif de création de compte et de vérification des identifiants.
 - [x] Importer de façon idempotente les patients et consultations historiques vers les tables GUID, avec identifiants de correspondance, en préservant les tables sources.
-- [ ] Relier l'interface Avalonia aux dépôts métier GUID et synchroniser les écritures dans les deux sens : les tables historiques restent la source utilisée par l'interface existante.
+- [x] Unifier le stockage des patients et consultations : les dépôts métier écrivent dans les tables historiques partagées et réconcilient la projection GUID à l'initialisation/lecture.
+- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier plutôt que le SQL intégré à MainWindow.
 - [x] Créer un parcours de première configuration qui n'autorise le premier administrateur que si aucun compte n'existe.
 - [x] Ajouter un filtrage initial des menus selon le rôle.
 - [ ] Renforcer et tester les autorisations dans chaque module et dans la couche métier.
@@ -69,6 +70,6 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
-- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (17 tests xUnit réussis sur le commit de code vérifié).
+- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (19 tests xUnit réussis sur le commit de code vérifié).
 
 > **Avertissement :** ce projet reste un prototype de développement. L'écran de connexion, le parcours de création du premier administrateur et la création de comptes sont reliés au service d'authentification, et les menus sont filtrés selon le rôle. Les permissions ne sont toutefois pas encore renforcées et testées dans chaque module. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
