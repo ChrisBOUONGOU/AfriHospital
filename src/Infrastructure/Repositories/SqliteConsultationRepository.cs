@@ -1,6 +1,7 @@
 using AfriHospital.src.Domain.Entities;
 using AfriHospital.src.Domain.Interfaces;
 using AfriHospital.src.Infrastructure.Persistence;
+using AfriHospital.src.Domain.Validation;
 using Microsoft.Data.Sqlite;
 using System.Globalization;
 
@@ -73,10 +74,7 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
     public async Task AddAsync(Consultation consultation, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(consultation);
-        if (consultation.PatientId == Guid.Empty || consultation.PractitionerId == Guid.Empty)
-            throw new ArgumentException("Le patient et le professionnel doivent être identifiés.");
-        if (consultation.ConsultationDateUtc == default)
-            throw new ArgumentException("La date de consultation est obligatoire.");
+        ConsultationValidator.Validate(consultation);
 
         await factory.InitializeAsync(cancellationToken);
         await using var connection = factory.CreateConnection();
