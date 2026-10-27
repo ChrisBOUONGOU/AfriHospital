@@ -29,7 +29,7 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Relier les nouveaux rendez-vous et consultations à un identifiant de patient sélectionné.
 - [x] Ajouter une migration SQLite compatible avec les bases existantes et rattacher automatiquement les anciens enregistrements lorsque le nom correspond exactement.
 - [x] Valider le format de date et d’heure à la création des rendez-vous et consultations.
-- [ ] Ajouter les statuts, la modification, l'annulation et les contrôles de conflits.
+- [x] Ajouter les statuts, la modification, l'annulation et les contrôles de conflits (conflits détectés pour un même patient à date/heure identique).
 - [ ] Faire valider les champs cliniques par des professionnels de santé.
 
 ## Étape 4 — Facturation et pharmacie
