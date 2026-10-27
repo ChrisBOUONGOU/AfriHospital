@@ -172,7 +172,7 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
         }
 
         var history = await consultations.GetForPatientAsync(patient.Id);
-        Assert.Contains(history, item => item.Id == consultation.Id && item.PractitionerName == "Dr. Test");
+        Assert.Contains(history, item => item.Id == consultation.Id && item.PractitionerId == practitionerId && item.PractitionerName == "Dr. Test");
         var allConsultations = await consultations.GetAllAsync();
         Assert.Contains(allConsultations, item => item.Id == consultation.Id && item.PatientId == patient.Id);
     }
