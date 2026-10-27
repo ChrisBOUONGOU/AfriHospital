@@ -142,6 +142,27 @@ internal static class UiText
         ["Désactivé"] = "Disabled", ["Créer une facture"] = "Create invoice",
         ["Enregistrer le paiement"] = "Record payment", ["Remboursement"] = "Refund",
         ["Aucun résultat"] = "No results", ["Chargement…"] = "Loading…"
+        ["Devise (ex. XOF, XAF, CDF)"] = "Currency (e.g. XOF, XAF, CDF)",
+        ["Montant du paiement"] = "Payment amount",
+        ["Montant du remboursement"] = "Refund amount",
+        ["Motif du remboursement (obligatoire)"] = "Refund reason (required)",
+        ["Créer la facture"] = "Create invoice",
+        ["Le patient, un montant positif et la devise sont obligatoires. Utilisez le point pour les décimales."] = "Patient, a positive amount, and currency are required. Use a period for decimals.",
+        ["La devise doit être un code de trois lettres, par exemple XOF, XAF ou CDF."] = "Currency must be a three-letter code, such as XOF, XAF, or CDF.",
+        ["Le nom du patient ou la description est trop long."] = "Patient name or description is too long.",
+        ["Facture créée."] = "Invoice created.",
+        ["Sélectionnez une facture, un montant positif et un moyen de paiement."] = "Select an invoice, a positive amount, and a payment method.",
+        ["Paiement enregistré. Reçu texte : "] = "Payment recorded. Text receipt: ",
+        ["Paiement enregistré, mais le reçu n'a pas pu être créé : "] = "Payment recorded, but the receipt could not be created: ",
+        ["Enregistrer le remboursement"] = "Record refund",
+        ["Sélectionnez un paiement, un montant positif, un moyen et un motif de remboursement."] = "Select a payment, a positive amount, a method, and a refund reason.",
+        ["Le motif du remboursement ne doit pas dépasser 250 caractères."] = "Refund reason must not exceed 250 characters.",
+        ["Remboursement enregistré. Reçu texte : "] = "Refund recorded. Text receipt: ",
+        ["Remboursement enregistré, mais le reçu n'a pas pu être créé : "] = "Refund recorded, but the receipt could not be created: ",
+        ["Nouvelle facture"] = "New invoice",
+        ["Enregistrer un paiement"] = "Record a payment",
+        ["Rembourser un paiement"] = "Refund a payment",
+        ["Factures et montants nets encaissés"] = "Invoices and net amounts collected",
     };
 
     public static string Language { get; private set; } = "fr";
