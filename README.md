@@ -228,7 +228,8 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Ajouter une fondation SQLite pour les nouvelles entités GUID et les comptes utilisateurs.
 - [x] Ajouter les interfaces de dépôt et dépôts SQLite pour les nouvelles entités.
 - [x] Ajouter le hachage PBKDF2-SHA256 et un service applicatif de vérification des identifiants.
-- [ ] Unifier les nouvelles tables domain_patients/domain_consultations avec les tables historiques utilisées par l'interface.
+- [x] Importer de façon idempotente les patients et consultations historiques dans les tables GUID, avec identifiants de correspondance et sans modifier les enregistrements historiques.
+- [ ] Terminer l'unification des nouvelles tables domain_patients/domain_consultations avec les tables historiques utilisées par l'interface, y compris la synchronisation des écritures dans les deux sens.
 - [x] Brancher la connexion à l'interface et créer un parcours de premier administrateur avec création atomique du premier compte.
 - [ ] Renforcer et tester les rôles et permissions dans chaque module (le filtrage initial des menus est en place).
 - [ ] Ajouter l'API ASP.NET Core si le mode multi-postes est retenu.
@@ -243,7 +244,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Étendre l'audit aux exports de reçus et aux futures opérations sensibles; définir les règles de conservation.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (15 tests réussis sur le commit de code vérifié).
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (17 tests réussis sur le commit de code vérifié).
 
 > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. En revanche, les nouvelles entités métier GUID et leurs dépôts SQLite ne sont pas encore unifiés avec les tables historiques utilisées par les modules existants.
 
@@ -484,7 +485,8 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Add SQLite foundations for the new GUID entities and user accounts.
 - [x] Add repository interfaces and SQLite repositories for the new entities.
 - [x] Add PBKDF2-SHA256 password hashing and an application service for credential verification.
-- [ ] Unify the new domain_patients/domain_consultations tables with the legacy tables used by the UI.
+- [x] Idempotently import legacy patients and consultations into the GUID tables with mapping identifiers, without modifying historical source records.
+- [ ] Complete unification of domain_patients/domain_consultations with the legacy tables used by the UI, including synchronization of writes in both directions.
 - [x] Connect login to the UI and create a first-administrator setup flow that only works when no user account exists.
 - [ ] Strengthen and test role permissions in every module (initial role-based navigation filtering is in place).
 - [x] Add an administrator page to create accounts with predefined roles.
@@ -500,7 +502,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Extend auditing to receipt exports and future sensitive operations; define retention rules.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [x] Confirm a successful build and automated test run in GitHub Actions (15 tests pass on the verified code commit).
+- [x] Confirm a successful build and automated test run in GitHub Actions (17 tests pass on the verified code commit).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI, but the new GUID-based domain entities and repositories are not yet unified with the legacy tables used by existing modules.
 
