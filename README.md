@@ -238,10 +238,11 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Tester la restauration sur plusieurs scénarios et automatiser les sauvegardes périodiques.
 - [ ] Chiffrer les données sensibles et les sauvegardes, sécuriser les secrets et les accès.
 - [x] Journaliser les connexions réussies/échouées et la création de comptes.
-- [ ] Étendre et tester le journal d'audit sur toutes les opérations sensibles.
+- [x] Journaliser les opérations métier avec l'acteur connecté et des détails non cliniques, avec une page de consultation réservée à l'administrateur.
+- [ ] Étendre et tester le journal d'audit sur toutes les opérations sensibles et protéger son intégrité.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (11 tests réussis sur le commit de code vérifié).
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (13 tests réussis sur le commit de code vérifié).
 
 > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. En revanche, les nouvelles entités métier GUID et leurs dépôts SQLite ne sont pas encore unifiés avec les tables historiques utilisées par les modules existants.
 
@@ -493,10 +494,11 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Test restoration scenarios and automate periodic backups.
 - [ ] Encrypt sensitive data and backups, and secure secrets and access.
 - [x] Audit successful/failed logins and user-account creation.
-- [ ] Extend and test the audit log for all sensitive operations.
+- [x] Audit business operations with the signed-in actor and non-clinical details, with an administrator-only audit viewer.
+- [ ] Extend and test the audit log for every sensitive operation and protect its integrity.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [x] Confirm a successful build and automated test run in GitHub Actions (11 tests pass on the verified code commit).
+- [x] Confirm a successful build and automated test run in GitHub Actions (13 tests pass on the verified code commit).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI, but the new GUID-based domain entities and repositories are not yet unified with the legacy tables used by existing modules.
 
