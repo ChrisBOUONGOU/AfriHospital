@@ -124,6 +124,7 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
             DateOfBirth = new DateOnly(1990, 5, 2),
             Sex = "F",
             PhoneNumber = "555-0100",
+            Notes = "Notes administratives",
             CreatedAtUtc = DateTime.UtcNow
         };
 
@@ -145,6 +146,7 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
         Assert.NotNull(found);
         Assert.Equal("555-0101", found!.PhoneNumber);
         Assert.Equal("AH-0002", found.PatientNumber);
+        Assert.Equal("Notes administratives", found.Notes);
 
         var consultations = new SqliteConsultationRepository(factory);
         var practitionerId = Guid.NewGuid();
@@ -154,7 +156,8 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
             PractitionerId = practitionerId,
             ConsultationDateUtc = DateTime.UtcNow,
             ClinicalNotes = "Motif de consultation",
-            Diagnosis = "Diagnostic de test"
+            Diagnosis = "Diagnostic de test",
+            PractitionerName = "Dr. Test"
         };
         await consultations.AddAsync(consultation);
         Assert.NotEqual(Guid.Empty, consultation.Id);
@@ -169,7 +172,9 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
         }
 
         var history = await consultations.GetForPatientAsync(patient.Id);
-        Assert.Contains(history, item => item.Id == consultation.Id);
+        Assert.Contains(history, item => item.Id == consultation.Id && item.PractitionerName == "Dr. Test");
+        var allConsultations = await consultations.GetAllAsync();
+        Assert.Contains(allConsultations, item => item.Id == consultation.Id && item.PatientId == patient.Id);
     }
 
     [Fact]
