@@ -1,3 +1,7 @@
 <Solution>
   <Project Path="AfriHospital.csproj" />
+  <Project Path="src/Domain/AfriHospital.Domain.csproj" />
+  <Project Path="src/Infrastructure/AfriHospital.Infrastructure.csproj" />
+  <Project Path="src/Application/AfriHospital.Application.csproj" />
+  <Project Path="tests/AfriHospital.UnitTests/AfriHospital.UnitTests.csproj" />
 </Solution>
