@@ -238,7 +238,7 @@ public partial class MainWindow : Window
 
     private void SetStatus(string text, bool error = false)
     {
-        _viewModel.StatusMessage = text;
+        _viewModel.StatusMessage = UiText.T(text);
         _status.Foreground = Brush(error ? "#B91C1C" : "#6B7280");
     }
 
