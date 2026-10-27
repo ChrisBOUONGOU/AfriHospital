@@ -146,7 +146,7 @@ Le fonctionnement hors ligne avec synchronisation entre plusieurs appareils néc
 
 Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
-Le projet exécutable desktop est `AfriHospital.csproj` à la racine. Le code métier est maintenant réparti en projets .NET distincts : `src/Domain/AfriHospital.Domain.csproj`, `src/Application/AfriHospital.Application.csproj` et `src/Infrastructure/AfriHospital.Infrastructure.csproj`. La suite xUnit s'exécute dans GitHub Actions ; le commit vérifié a compilé sans avertissement ni erreur et les 23 tests ont réussi. Le lancement interactif de l'interface graphique doit encore être vérifié manuellement sur Windows/Linux.
+Le projet exécutable desktop est `AfriHospital.csproj` à la racine. Le code métier est maintenant réparti en projets .NET distincts : `src/Domain/AfriHospital.Domain.csproj`, `src/Application/AfriHospital.Application.csproj` et `src/Infrastructure/AfriHospital.Infrastructure.csproj`. La suite xUnit s'exécute dans GitHub Actions ; le commit vérifié a compilé sans avertissement ni erreur et les 28 tests ont réussi. Le lancement interactif de l'interface graphique doit encore être vérifié manuellement sur Windows/Linux.
 
 ### Compatibilité macOS
 
@@ -205,7 +205,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Configurer une persistance SQLite locale pour les modules actuellement disponibles.
 - [x] Définir les premières entités métier Patient, Consultation et HospitalUser.
 - [x] Vérifier la restauration et le build Release du projet desktop et de ses projets référencés dans GitHub Actions (0 avertissement, 0 erreur).
-- [x] Exécuter les tests xUnit dans GitHub Actions : 23 réussis, 0 échec.
+- [x] Exécuter les tests xUnit dans GitHub Actions : 28 réussis, 0 échec.
 - [ ] Lancer l'interface graphique et vérifier visuellement le rendu sur Windows/Linux (validation manuelle non réalisée par le CI headless).
 
 ### Phase 2 — Patients et consultations
@@ -214,9 +214,10 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Relier les consultations et rendez-vous aux patients sélectionnés dans le schéma historique.
 - [x] Valider le format de date et d'heure des rendez-vous et consultations.
 - [x] Gérer les statuts des rendez-vous, leur modification, leur annulation et les conflits horaires exacts par patient.
-- [ ] Compléter les validations métier des champs et des dates.
+- [x] Valider les champs obligatoires, les limites de longueur et les dates de naissance/consultation non futures au niveau métier.
+- [ ] Faire valider les règles de saisie propres au pays cible.
 - [x] Ajouter et exécuter les premiers tests automatisés d'authentification.
-- [ ] Étendre la couverture aux modules métier.
+- [x] Étendre les tests automatisés aux patients, consultations et rendez-vous (validation des champs/dates, enregistrement, recherche et historique).
 
 ### Phase 3 — Gestion hospitalière
 - [x] Créer et afficher des rendez-vous simples associés à un patient.
@@ -466,7 +467,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Configure local SQLite persistence for the currently available modules.
 - [x] Define the initial Patient, Consultation, and HospitalUser domain entities.
 - [x] Verify Release restore/build of the desktop project and referenced projects in GitHub Actions (0 warnings, 0 errors).
-- [x] Run xUnit tests in GitHub Actions: 23 passed, 0 failed.
+- [x] Run xUnit tests in GitHub Actions: 28 passed, 0 failed.
 - [ ] Launch the graphical interface and visually verify it on Windows/Linux (manual validation is not performed by headless CI).
 
 ### Phase 2 — Patients and Consultations
@@ -475,9 +476,10 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Link consultations and appointments to selected patients in the legacy schema.
 - [x] Validate appointment and consultation date/time formats.
 - [x] Manage appointment statuses, editing, cancellation, and exact-time conflicts for the same patient.
-- [ ] Complete business validation for fields and dates.
+- [x] Enforce required fields, field-length limits, and non-future birth/consultation dates in the business layer.
+- [ ] Validate country-specific data-entry rules.
 - [x] Add and run initial automated authentication tests.
-- [ ] Extend test coverage to business modules.
+- [x] Extend automated coverage to patients, consultations, and appointments (field/date validation, persistence, search, and history).
 
 ### Phase 3 — Hospital Management
 - [x] Create and display basic appointments linked to a patient.
@@ -516,7 +518,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Extend auditing to receipt exports and future sensitive operations; define retention rules.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [x] Confirm a successful build and automated test run in GitHub Actions (clean build, 23 tests pass on the verified commit).
+- [x] Confirm a successful build and automated test run in GitHub Actions (clean build, 28 tests pass on the verified commit).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI. Patient and consultation storage is bridged to the legacy tables, and their screens now use domain repositories. The full UI refactor is still in progress because other modules continue to use `HospitalDatabase` and SQL in `MainWindow`.
 
