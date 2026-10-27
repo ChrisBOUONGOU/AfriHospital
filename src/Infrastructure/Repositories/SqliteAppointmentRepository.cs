@@ -1,6 +1,7 @@
 using AfriHospital.src.Domain.Entities;
 using AfriHospital.src.Domain.Interfaces;
 using AfriHospital.src.Infrastructure.Persistence;
+using AfriHospital.src.Domain.Validation;
 using Microsoft.Data.Sqlite;
 using System.Globalization;
 
@@ -70,7 +71,7 @@ public sealed class SqliteAppointmentRepository(SqliteConnectionFactory factory)
     public async Task AddAsync(Appointment appointment, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(appointment);
-        Validate(appointment, requireId: false);
+        AppointmentValidator.Validate(appointment, requireId: false);
         await factory.InitializeAsync(cancellationToken);
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
@@ -93,7 +94,7 @@ public sealed class SqliteAppointmentRepository(SqliteConnectionFactory factory)
     public async Task UpdateAsync(Appointment appointment, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(appointment);
-        Validate(appointment, requireId: true);
+        AppointmentValidator.Validate(appointment, requireId: true);
         await factory.InitializeAsync(cancellationToken);
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
@@ -122,15 +123,6 @@ public sealed class SqliteAppointmentRepository(SqliteConnectionFactory factory)
         command.CommandText = "UPDATE appointments SET status='Annulé' WHERE id=$id AND status <> 'Annulé';";
         command.Parameters.AddWithValue("$id", appointmentId);
         await command.ExecuteNonQueryAsync(cancellationToken);
-    }
-
-    private static void Validate(Appointment appointment, bool requireId)
-    {
-        if (requireId && appointment.Id <= 0) throw new ArgumentException("L'identifiant du rendez-vous est invalide.");
-        if (appointment.PatientId is null || appointment.PatientId == Guid.Empty) throw new ArgumentException("Un patient doit être sélectionné.");
-        if (appointment.ScheduledAt == default) throw new ArgumentException("La date du rendez-vous est obligatoire.");
-        if ((appointment.Reason?.Trim().Length ?? 0) > 250) throw new ArgumentException("Le motif ne doit pas dépasser 250 caractères.");
-        if (string.IsNullOrWhiteSpace(appointment.Status)) appointment.Status = "Planifié";
     }
 
     private static void Bind(SqliteCommand command, Appointment appointment)
