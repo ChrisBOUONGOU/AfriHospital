@@ -230,7 +230,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Ajouter le hachage PBKDF2-SHA256 et un service applicatif de vérification des identifiants.
 - [x] Importer de façon idempotente les patients et consultations historiques vers les tables GUID, en conservant les identifiants de correspondance et les tables sources.
 - [x] Unifier le stockage des patients et consultations : les dépôts métier écrivent dans les tables historiques partagées et réconcilient la projection GUID; les données historiques et les notes sont conservées.
-- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier au lieu du SQL intégré à MainWindow (travail en cours : les écrans Patients et Consultations sont migrés ; les autres modules utilisent encore `HospitalDatabase`).
+- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier au lieu du SQL intégré à MainWindow (travail en cours : les écrans Patients, Consultations et Rendez-vous sont migrés vers des dépôts dédiés ; Pharmacie, Facturation, Utilisateurs, Audit et Sauvegarde utilisent encore `HospitalDatabase`).
 - [x] Faire utiliser `IPatientRepository` et `IConsultationRepository` par les écrans Patients et Consultations, et couvrir la conservation des notes et la lecture de l'historique par des tests.
 - [x] Brancher la connexion à l'interface et créer un parcours de premier administrateur avec création atomique du premier compte.
 - [ ] Renforcer et tester les rôles et permissions dans chaque module (le filtrage initial des menus est en place).
@@ -435,7 +435,7 @@ The exact path depends on the repository's actual structure.
 
 ## 🔐 Security and Privacy
 
-Protecting medical data is a core design priority. A login screen, first-administrator setup, and an administrator user-creation screen are now connected to the authentication service. Navigation is filtered by role, and login/account-creation events are audited. This is an initial protection layer: permissions still need stronger enforcement and testing. Patients and consultations now use a compatibility bridge between the legacy tables and GUID tables: domain repositories write to the legacy tables, and the GUID projection is reconciled idempotently during initialization and before domain reads. Legacy tables and their notes are retained.
+Protecting medical data is a core design priority. A login screen, first-administrator setup, and an administrator user-creation screen are now connected to the authentication service. Navigation is filtered by role, and login/account-creation events are audited. This is an initial protection layer: permissions still need stronger enforcement and testing. Patients, consultations, and appointments are being moved behind domain repositories. The Patients and Consultations screens use dedicated repositories; the Appointments screen now uses a dedicated repository that preserves GUID patient references, conflict checks, and cancellation history. CI validation of this latest migration is pending. The legacy/GUID compatibility bridge is idempotent and source tables are retained.
 
 Planned safeguards include:
 
@@ -489,7 +489,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Add PBKDF2-SHA256 password hashing and an application service for credential verification.
 - [x] Idempotently import legacy patients and consultations into the GUID tables, preserving mapping identifiers and source tables.
 - [x] Unify patient and consultation storage: domain repositories write to the shared legacy tables and reconcile the GUID projection; historical data and notes are retained.
-- [ ] Refactor the Avalonia UI to use the domain repositories directly instead of SQL embedded in MainWindow (in progress: Patients and Consultations screens are migrated; other modules still use `HospitalDatabase`).
+- [ ] Refactor the Avalonia UI to use the domain repositories directly instead of SQL embedded in MainWindow (in progress: Patients, Consultations, and Appointments screens are migrated to dedicated repositories; Pharmacy, Billing, Users, Audit, and Backup still use `HospitalDatabase`).
 - [x] Route the Patients and Consultations screens through `IPatientRepository` and `IConsultationRepository`, with tests for note preservation and consultation-history reads.
 - [x] Connect login to the UI and create a first-administrator setup flow that only works when no user account exists.
 - [ ] Strengthen and test role permissions in every module (initial role-based navigation filtering is in place).
