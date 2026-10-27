@@ -146,7 +146,7 @@ Le fonctionnement hors ligne avec synchronisation entre plusieurs appareils néc
 
 Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
-Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite de tests xUnit est présente et exécutée dans GitHub Actions ; le dernier résultat vérifié pour le code était une compilation réussie et 11 tests réussis.
+Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite xUnit s'exécute dans GitHub Actions ; le dernier résultat vérifié pour le code est une compilation réussie sans avertissement ni erreur et 19 tests réussis.
 
 ### 1. Cloner le dépôt
 
@@ -230,7 +230,8 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Ajouter le hachage PBKDF2-SHA256 et un service applicatif de vérification des identifiants.
 - [x] Importer de façon idempotente les patients et consultations historiques vers les tables GUID, en conservant les identifiants de correspondance et les tables sources.
 - [x] Unifier le stockage des patients et consultations : les dépôts métier écrivent dans les tables historiques partagées et réconcilient la projection GUID; les données historiques et les notes sont conservées.
-- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier au lieu du SQL intégré à MainWindow.
+- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier au lieu du SQL intégré à MainWindow (travail en cours : les écrans Patients et Consultations sont migrés ; les autres modules utilisent encore `HospitalDatabase`).
+- [x] Faire utiliser `IPatientRepository` et `IConsultationRepository` par les écrans Patients et Consultations, et couvrir la conservation des notes et la lecture de l'historique par des tests.
 - [x] Brancher la connexion à l'interface et créer un parcours de premier administrateur avec création atomique du premier compte.
 - [ ] Renforcer et tester les rôles et permissions dans chaque module (le filtrage initial des menus est en place).
 - [ ] Ajouter l'API ASP.NET Core si le mode multi-postes est retenu.
@@ -247,7 +248,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
 - [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (19 tests réussis sur le commit de code vérifié).
 
-> Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. En revanche, les nouvelles entités métier GUID et leurs dépôts SQLite ne sont pas encore unifiés avec les tables historiques utilisées par les modules existants.
+ > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. Le stockage des patients et consultations est unifié par un pont de compatibilité ; les écrans Patients et Consultations utilisent maintenant les dépôts métier. Le refactoring complet de l'interface n'est pas terminé : les autres modules utilisent encore `HospitalDatabase` et du SQL dans `MainWindow`.
 
 ## 🤝 Contribution
 
@@ -488,7 +489,8 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Add PBKDF2-SHA256 password hashing and an application service for credential verification.
 - [x] Idempotently import legacy patients and consultations into the GUID tables, preserving mapping identifiers and source tables.
 - [x] Unify patient and consultation storage: domain repositories write to the shared legacy tables and reconcile the GUID projection; historical data and notes are retained.
-- [ ] Refactor the Avalonia UI to use the domain repositories directly instead of SQL embedded in MainWindow.
+- [ ] Refactor the Avalonia UI to use the domain repositories directly instead of SQL embedded in MainWindow (in progress: Patients and Consultations screens are migrated; other modules still use `HospitalDatabase`).
+- [x] Route the Patients and Consultations screens through `IPatientRepository` and `IConsultationRepository`, with tests for note preservation and consultation-history reads.
 - [x] Connect login to the UI and create a first-administrator setup flow that only works when no user account exists.
 - [ ] Strengthen and test role permissions in every module (initial role-based navigation filtering is in place).
 - [x] Add an administrator page to create accounts with predefined roles.
@@ -506,7 +508,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Add xUnit automated tests and run them in GitHub Actions.
 - [x] Confirm a successful build and automated test run in GitHub Actions (19 tests pass on the verified code commit).
 
-> Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI, but the new GUID-based domain entities and repositories are not yet unified with the legacy tables used by existing modules.
+> Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI. Patient and consultation storage is bridged to the legacy tables, and their screens now use domain repositories. The full UI refactor is still in progress because other modules continue to use `HospitalDatabase` and SQL in `MainWindow`.
 
 ## 🤝 Contributing
 
