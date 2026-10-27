@@ -11,7 +11,8 @@ internal static class UiText
 {
     private static readonly Dictionary<string, string> English = new(StringComparer.Ordinal)
     {
-        ["Français"] = "Français", ["English"] = "English",
+        ["Français"] = "Français", ["English"] = "English", ["Langue"] = "Language",
+        ["Utilisateurs"] = "Users", ["Patients"] = "Patients", ["Consultations"] = "Consultations", ["Audit"] = "Audit",
         ["Nom d'utilisateur"] = "Username", ["Mot de passe"] = "Password",
         ["Confirmer le mot de passe"] = "Confirm password",
         ["Créer l'administrateur"] = "Create administrator", ["Se connecter"] = "Sign in",
