@@ -19,8 +19,8 @@ public sealed class BillingRefundTests : IDisposable
     {
         await _database.InitializeAsync();
         await _database.ExecuteAsync(
-            "INSERT INTO invoices(patient_name,description,amount,currency,status) VALUES('Patient test','Consultation',100,'XAF','À payer')");
-        var invoiceId = Convert.ToInt64(await ScalarAsync("SELECT last_insert_rowid();"));
+            "INSERT INTO invoices(id,patient_name,description,amount,currency,status) VALUES(1,'Patient test','Consultation',100,'XAF','À payer')");
+        const long invoiceId = 1;
         var paymentId = await _database.RecordPaymentAsync(invoiceId, 100m, "Espèces");
 
         await _database.RecordRefundAsync(paymentId, 25m, "Mobile money", "Correction de paiement");
@@ -46,7 +46,7 @@ public sealed class BillingRefundTests : IDisposable
     {
         await _database.InitializeAsync();
         await _database.ExecuteAsync(
-            "INSERT INTO invoices(patient_name,description,amount,currency,status) VALUES('Patient test','Acte',50,'XAF','À payer')");
+            "INSERT INTO invoices(id,patient_name,description,amount,currency,status) VALUES(1,'Patient test','Acte',50,'XAF','À payer')");
         var invoiceId = Convert.ToInt64(await ScalarAsync("SELECT last_insert_rowid();"));
         var paymentId = await _database.RecordPaymentAsync(invoiceId, 50m, "Carte");
         await _database.RecordRefundAsync(paymentId, 20m, "Espèces", "Remboursement partiel");
@@ -65,7 +65,7 @@ public sealed class BillingRefundTests : IDisposable
     {
         await _database.InitializeAsync();
         await _database.ExecuteAsync(
-            "INSERT INTO invoices(patient_name,description,amount,currency,status) VALUES('Patient test','Analyse',40,'XAF','À payer')");
+            "INSERT INTO invoices(id,patient_name,description,amount,currency,status) VALUES(1,'Patient test','Analyse',40,'XAF','À payer')");
         var invoiceId = Convert.ToInt64(await ScalarAsync("SELECT last_insert_rowid();"));
         var paymentId = await _database.RecordPaymentAsync(invoiceId, 40m, "Virement");
         await _database.RecordRefundAsync(paymentId, 40m, "Mobile money", "Annulation de prestation");
@@ -74,13 +74,6 @@ public sealed class BillingRefundTests : IDisposable
         Assert.Equal(0m, invoice.Paid);
         Assert.Contains("À payer", Assert.Single(await _database.GetRowsAsync(
             "SELECT status FROM invoices WHERE id=$id", r => r.GetString(0), ("$id", invoiceId))));
-    }
-
-    private async Task<object?> ScalarAsync(string sql)
-    {
-        // Query through the same isolated database using its existing parameterized read helper.
-        var rows = await _database.GetRowsAsync(sql, r => r.GetString(0));
-        return rows.SingleOrDefault();
     }
 
     public void Dispose()
