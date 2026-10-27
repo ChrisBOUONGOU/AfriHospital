@@ -47,7 +47,7 @@ public sealed class BillingRefundTests : IDisposable
         await _database.InitializeAsync();
         await _database.ExecuteAsync(
             "INSERT INTO invoices(id,patient_name,description,amount,currency,status) VALUES(1,'Patient test','Acte',50,'XAF','À payer')");
-        var invoiceId = Convert.ToInt64(await ScalarAsync("SELECT last_insert_rowid();"));
+        const long invoiceId = 1;
         var paymentId = await _database.RecordPaymentAsync(invoiceId, 50m, "Carte");
         await _database.RecordRefundAsync(paymentId, 20m, "Espèces", "Remboursement partiel");
 
@@ -66,7 +66,7 @@ public sealed class BillingRefundTests : IDisposable
         await _database.InitializeAsync();
         await _database.ExecuteAsync(
             "INSERT INTO invoices(id,patient_name,description,amount,currency,status) VALUES(1,'Patient test','Analyse',40,'XAF','À payer')");
-        var invoiceId = Convert.ToInt64(await ScalarAsync("SELECT last_insert_rowid();"));
+        const long invoiceId = 1;
         var paymentId = await _database.RecordPaymentAsync(invoiceId, 40m, "Virement");
         await _database.RecordRefundAsync(paymentId, 40m, "Mobile money", "Annulation de prestation");
 
