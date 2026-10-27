@@ -1,6 +1,7 @@
 using AfriHospital.src.Domain.Entities;
 using AfriHospital.src.Domain.Interfaces;
 using AfriHospital.src.Infrastructure.Persistence;
+using AfriHospital.src.Domain.Validation;
 using Microsoft.Data.Sqlite;
 using System.Globalization;
 
@@ -51,7 +52,7 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
     public async Task AddAsync(Patient patient, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(patient);
-        Validate(patient);
+        PatientValidator.Validate(patient);
         await EnsureReadyAsync(cancellationToken);
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
@@ -101,12 +102,6 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
 
     private async Task EnsureReadyAsync(CancellationToken cancellationToken) =>
         await factory.InitializeAsync(cancellationToken);
-
-    private static void Validate(Patient patient)
-    {
-        if (string.IsNullOrWhiteSpace(patient.PatientNumber) || string.IsNullOrWhiteSpace(patient.FullName))
-            throw new ArgumentException("Le numéro et le nom du patient sont obligatoires.");
-    }
 
     private static void BindLegacyPatient(SqliteCommand command, Patient patient)
     {
