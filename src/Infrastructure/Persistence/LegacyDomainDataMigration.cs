@@ -57,7 +57,7 @@ public static class LegacyDomainDataMigration
             update.Transaction = transaction;
             update.CommandText = """
                 UPDATE domain_patients SET
-                    patient_number=CASE WHEN patient_number LIKE 'LEGACY-%' THEN $number ELSE patient_number END,
+                    patient_number=$number,
                     first_name=$first, last_name=$last, date_of_birth=$birth, sex=$sex,
                     phone_number=$phone, created_at_utc=$created
                 WHERE legacy_patient_id=$legacyId;
