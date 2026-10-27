@@ -138,6 +138,15 @@ public partial class MainWindow : Window
 
     private void BuildShell()
     {
+        // These controls are reused when the language changes. Detach them from
+        // the previous shell before placing them in the newly built layout.
+        if (_pageTitle.Parent is Panel previousTitleParent)
+            previousTitleParent.Children.Remove(_pageTitle);
+        if (_status.Parent is Panel previousStatusParent)
+            previousStatusParent.Children.Remove(_status);
+        if (_content.Parent is Panel previousContentParent)
+            previousContentParent.Children.Remove(_content);
+
         var nav = new StackPanel { Spacing = 8, Width = 220, Background = Brush("#171717") };
         nav.Children.Add(new StackPanel
         {
