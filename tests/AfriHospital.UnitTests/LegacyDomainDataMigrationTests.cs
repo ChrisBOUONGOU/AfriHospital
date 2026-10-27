@@ -1,4 +1,6 @@
 using AfriHospital.src.Infrastructure.Persistence;
+using AfriHospital.src.Infrastructure.Repositories;
+using AfriHospital.src.Domain.Entities;
 using Microsoft.Data.Sqlite;
 using Xunit;
 
@@ -106,6 +108,66 @@ public sealed class LegacyDomainDataMigrationTests : IDisposable
             if (reader.GetString(1).Equals("patient_id", StringComparison.OrdinalIgnoreCase))
                 hasPatientId = true;
         Assert.True(hasPatientId);
+    }
+
+    [Fact]
+    public async Task DomainRepositories_WriteToSharedLegacyTablesAndCanReadTheSameRecords()
+    {
+        var factory = new SqliteConnectionFactory(_databasePath);
+        await factory.InitializeAsync();
+        var patients = new SqlitePatientRepository(factory);
+        var patient = new Patient
+        {
+            PatientNumber = "AH-0001",
+            FirstName = "Marie",
+            LastName = "N'Diaye",
+            DateOfBirth = new DateOnly(1990, 5, 2),
+            Sex = "F",
+            PhoneNumber = "555-0100",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        await patients.AddAsync(patient);
+        Assert.NotEqual(Guid.Empty, patient.Id);
+
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM patients WHERE patient_number='AH-0001' AND name='Marie N''Diaye';";
+            Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
+        }
+
+        patient.PhoneNumber = "555-0101";
+        await patients.UpdateAsync(patient);
+        var found = await patients.GetByIdAsync(patient.Id);
+        Assert.NotNull(found);
+        Assert.Equal("555-0101", found!.PhoneNumber);
+
+        var consultations = new SqliteConsultationRepository(factory);
+        var practitionerId = Guid.NewGuid();
+        var consultation = new Consultation
+        {
+            PatientId = patient.Id,
+            PractitionerId = practitionerId,
+            ConsultationDateUtc = DateTime.UtcNow,
+            ClinicalNotes = "Motif de consultation",
+            Diagnosis = "Diagnostic de test"
+        };
+        await consultations.AddAsync(consultation);
+        Assert.NotEqual(Guid.Empty, consultation.Id);
+
+        await using (var connection = factory.CreateConnection())
+        {
+            await connection.OpenAsync();
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM consultations WHERE patient_id=(SELECT legacy_patient_id FROM domain_patients WHERE id=$id) AND summary LIKE '%Diagnostic de test%';";
+            command.Parameters.AddWithValue("$id", patient.Id.ToString("D"));
+            Assert.Equal(1L, (long)(await command.ExecuteScalarAsync())!);
+        }
+
+        var history = await consultations.GetForPatientAsync(patient.Id);
+        Assert.Contains(history, item => item.Id == consultation.Id);
     }
 
     public void Dispose()
