@@ -104,9 +104,8 @@ public sealed class SqlitePatientRepository(SqliteConnectionFactory factory) : I
 
     private static void Validate(Patient patient)
     {
-        if (string.IsNullOrWhiteSpace(patient.PatientNumber) ||
-            string.IsNullOrWhiteSpace(patient.FirstName) || string.IsNullOrWhiteSpace(patient.LastName))
-            throw new ArgumentException("Le numéro, le prénom et le nom du patient sont obligatoires.");
+        if (string.IsNullOrWhiteSpace(patient.PatientNumber) || string.IsNullOrWhiteSpace(patient.FullName))
+            throw new ArgumentException("Le numéro et le nom du patient sont obligatoires.");
     }
 
     private static void BindLegacyPatient(SqliteCommand command, Patient patient)
