@@ -62,7 +62,7 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Mettre en place une authentification robuste et des rôles avec autorisations.
 - [ ] Chiffrer les données sensibles et les sauvegardes, sécuriser les secrets et les accès.
 - [x] Journaliser les connexions réussies/échouées et la création de comptes.
-- [x] Ajouter un journal métier avec acteur, détails non cliniques et consultation réservée à l'administrateur.
+- [x] Ajouter un journal métier et de sauvegarde/restauration avec acteur, détails non cliniques et consultation réservée à l'administrateur.
 - [ ] Étendre le journal d'audit à toutes les opérations sensibles et tester son intégrité.
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
