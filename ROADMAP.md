@@ -40,7 +40,7 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Enregistrer les paiements partiels/complets, calculer le solde et mettre à jour le statut de facture.
 - [x] Générer un reçu texte local après l'enregistrement d'un paiement.
 - [ ] Gérer les remboursements et produire des reçus formatés.
-- [ ] Gérer les lots, numéros de lot, péremptions, fournisseurs et mouvements de stock.
+- [x] Gérer les lots, numéros de lot, péremptions, fournisseurs et mouvements d'entrée/sortie de stock.
 - [ ] Valider les règles fiscales et monétaires de chaque pays cible.
 
 ## Étape 5 — Sauvegarde, sécurité et déploiement
@@ -66,6 +66,6 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
-- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (4 tests xUnit réussis sur le commit de code vérifié).
+- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (8 tests xUnit réussis sur le commit de code vérifié).
 
 > **Avertissement :** ce projet reste un prototype de développement. L'écran de connexion, le parcours de création du premier administrateur et la création de comptes sont reliés au service d'authentification, et les menus sont filtrés selon le rôle. Les permissions ne sont toutefois pas encore renforcées et testées dans chaque module. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
