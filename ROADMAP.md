@@ -63,10 +63,11 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [ ] Chiffrer les données sensibles et les sauvegardes, sécuriser les secrets et les accès.
 - [x] Journaliser les connexions réussies/échouées et la création de comptes.
 - [x] Ajouter un journal métier et de sauvegarde/restauration avec acteur, détails non cliniques et consultation réservée à l'administrateur.
-- [ ] Étendre le journal d'audit à toutes les opérations sensibles et tester son intégrité.
+- [x] Rendre les journaux métier et de sécurité append-only dans SQLite et tester le rejet des mises à jour/suppressions.
+- [ ] Étendre l'audit aux exports de reçus et aux futures opérations sensibles; définir les règles de conservation.
 - [ ] Définir les politiques de conservation, consentement et conformité du pays cible.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter une suite xUnit et l'exécuter automatiquement dans GitHub Actions.
-- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (13 tests xUnit réussis sur le commit de code vérifié).
+- [x] Confirmer un build et une exécution de tests réussis après intégration de la connexion (15 tests xUnit réussis sur le commit de code vérifié).
 
 > **Avertissement :** ce projet reste un prototype de développement. L'écran de connexion, le parcours de création du premier administrateur et la création de comptes sont reliés au service d'authentification, et les menus sont filtrés selon le rôle. Les permissions ne sont toutefois pas encore renforcées et testées dans chaque module. La base locale et les sauvegardes ne sont pas chiffrées. Ne pas l'utiliser avec de vrais dossiers médicaux ou pour des décisions cliniques avant une revue de sécurité, des tests et une validation locale.
