@@ -107,26 +107,40 @@ public static class LegacyDomainDataMigration
                         DateTimeStyles.AssumeLocal, out var consultationDate))
                     continue;
 
-                await using var insert = connection.CreateCommand();
-                insert.Transaction = (SqliteTransaction)transaction;
-                insert.CommandText = """
-                    INSERT INTO domain_consultations
-                        (id, patient_id, practitioner_id, consultation_date_utc, clinical_notes, diagnosis, legacy_consultation_id)
-                    SELECT $id, p.id, $practitioner, $date, $notes, NULL, $legacyId
-                    FROM domain_patients p WHERE p.legacy_patient_id=$patientId
-                    ON CONFLICT(legacy_consultation_id) DO UPDATE SET
-                        patient_id=excluded.patient_id,
-                        practitioner_id=excluded.practitioner_id,
-                        consultation_date_utc=excluded.consultation_date_utc,
-                        clinical_notes=excluded.clinical_notes;
+                var practitionerId = await ResolvePractitionerGuidAsync(connection, transaction, legacy.Clinician, cancellationToken);
+                await using var update = connection.CreateCommand();
+                update.Transaction = transaction;
+                update.CommandText = """
+                    UPDATE domain_consultations SET patient_id=(
+                        SELECT id FROM domain_patients WHERE legacy_patient_id=$patientId
+                    ), practitioner_id=$practitioner, consultation_date_utc=$date, clinical_notes=$notes
+                    WHERE legacy_consultation_id=$legacyId;
                     """;
-                insert.Parameters.AddWithValue("$id", StableGuid($"legacy-consultation:{legacy.Id}").ToString("D"));
-                insert.Parameters.AddWithValue("$practitioner", StableGuid($"legacy-practitioner:{(string.IsNullOrWhiteSpace(legacy.Clinician) ? "unknown" : legacy.Clinician.Trim().ToUpperInvariant())}").ToString("D"));
-                insert.Parameters.AddWithValue("$date", consultationDate.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
-                insert.Parameters.AddWithValue("$notes", (object?)legacy.Summary ?? DBNull.Value);
-                insert.Parameters.AddWithValue("$legacyId", legacy.Id);
-                insert.Parameters.AddWithValue("$patientId", legacy.PatientId.Value);
-                imported += await insert.ExecuteNonQueryAsync(cancellationToken);
+                update.Parameters.AddWithValue("$practitioner", practitionerId.ToString("D"));
+                update.Parameters.AddWithValue("$date", consultationDate.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+                update.Parameters.AddWithValue("$notes", legacy.Summary);
+                update.Parameters.AddWithValue("$legacyId", legacy.Id);
+                update.Parameters.AddWithValue("$patientId", legacy.PatientId.Value);
+                var updated = await update.ExecuteNonQueryAsync(cancellationToken);
+                if (updated == 0)
+                {
+                    await using var insert = connection.CreateCommand();
+                    insert.Transaction = transaction;
+                    insert.CommandText = """
+                        INSERT OR IGNORE INTO domain_consultations
+                            (id, patient_id, practitioner_id, consultation_date_utc, clinical_notes, diagnosis, legacy_consultation_id)
+                        SELECT $id, p.id, $practitioner, $date, $notes, NULL, $legacyId
+                        FROM domain_patients p WHERE p.legacy_patient_id=$patientId;
+                        """;
+                    insert.Parameters.AddWithValue("$id", StableGuid($"legacy-consultation:{legacy.Id}").ToString("D"));
+                    insert.Parameters.AddWithValue("$practitioner", practitionerId.ToString("D"));
+                    insert.Parameters.AddWithValue("$date", consultationDate.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
+                    insert.Parameters.AddWithValue("$notes", legacy.Summary);
+                    insert.Parameters.AddWithValue("$legacyId", legacy.Id);
+                    insert.Parameters.AddWithValue("$patientId", legacy.PatientId.Value);
+                    imported += await insert.ExecuteNonQueryAsync(cancellationToken);
+                }
+                else imported += updated;
             }
         }
 
@@ -252,6 +266,21 @@ public static class LegacyDomainDataMigration
     public static Guid StableConsultationGuid(long legacyId) => StableGuid($"legacy-consultation:{legacyId}");
     public static Guid StablePractitionerGuid(string clinician) =>
         StableGuid($"legacy-practitioner:{(string.IsNullOrWhiteSpace(clinician) ? "unknown" : clinician.Trim().ToUpperInvariant())}");
+
+    private static async Task<Guid> ResolvePractitionerGuidAsync(SqliteConnection connection, SqliteTransaction transaction, string clinician, CancellationToken cancellationToken)
+    {
+        if (Guid.TryParse(clinician, out var directId)) return directId;
+        if (!string.IsNullOrWhiteSpace(clinician))
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT id FROM hospital_users WHERE username=$username COLLATE NOCASE LIMIT 1;";
+            command.Parameters.AddWithValue("$username", clinician.Trim());
+            var value = await command.ExecuteScalarAsync(cancellationToken) as string;
+            if (Guid.TryParse(value, out var userId)) return userId;
+        }
+        return StablePractitionerGuid(clinician);
+    }
 
     private static async Task<bool> TableExistsAsync(SqliteConnection connection, SqliteTransaction transaction, string table, CancellationToken cancellationToken)
     {
