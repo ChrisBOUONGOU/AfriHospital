@@ -111,21 +111,8 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool CanAccess(string module)
-    {
-        var role = _currentUser?.Role ?? "";
-        if (role.Equals("Admin", StringComparison.OrdinalIgnoreCase)) return true;
-        if (module.Equals("Tableau de bord", StringComparison.OrdinalIgnoreCase)) return _currentUser is not null;
-        return module switch
-        {
-            "Patients" => role.Equals("Receptionist", StringComparison.OrdinalIgnoreCase) || role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) || role.Equals("Nurse", StringComparison.OrdinalIgnoreCase),
-            "Consultations" => role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) || role.Equals("Nurse", StringComparison.OrdinalIgnoreCase),
-            "Rendez-vous" => role.Equals("Receptionist", StringComparison.OrdinalIgnoreCase) || role.Equals("Doctor", StringComparison.OrdinalIgnoreCase) || role.Equals("Nurse", StringComparison.OrdinalIgnoreCase),
-            "Pharmacie / Stocks" => role.Equals("Pharmacist", StringComparison.OrdinalIgnoreCase),
-            "Facturation" => role.Equals("Billing", StringComparison.OrdinalIgnoreCase),
-            _ => false
-        };
-    }
+    private bool CanAccess(string module) =>
+        ModuleAuthorization.CanAccess(_currentUser?.Role, module);
 
     private void AddProtectedNav(StackPanel nav, string label, Func<Task> action)
     {
