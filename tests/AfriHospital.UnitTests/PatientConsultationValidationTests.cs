@@ -168,8 +168,8 @@ public sealed class PatientConsultationValidationTests : IDisposable
         var saved = Assert.Single(await consultations.GetForPatientAsync(patient.Id));
         Assert.Equal(consultation.Id, saved.Id);
         Assert.Equal("Dr Test", saved.PractitionerName);
-        Assert.Contains("Motif de consultation", saved.ClinicalNotes);
-        Assert.Contains("Diagnostic de test", saved.ClinicalNotes);
+        Assert.Contains("Motif de consultation", saved.ClinicalNotes!);
+        Assert.Contains("Diagnostic de test", saved.ClinicalNotes!);
     }
 
     public void Dispose()
