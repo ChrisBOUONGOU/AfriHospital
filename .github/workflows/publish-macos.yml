@@ -1,0 +1,46 @@
+name: Publish AfriHospital for macOS
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ master, main ]
+    paths:
+      - '**.cs'
+      - '**.axaml'
+      - '**.csproj'
+      - '**.slnx'
+      - '.github/workflows/publish-macos.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish ${{ matrix.rid }}
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        rid: [osx-x64, osx-arm64]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore AfriHospital.csproj -r ${{ matrix.rid }}
+      - name: Publish self-contained app
+        run: dotnet publish AfriHospital.csproj --configuration Release --runtime ${{ matrix.rid }} --self-contained true -p:PublishSingleFile=false -p:UseAppHost=true --output artifacts/AfriHospital-${{ matrix.rid }}
+      - name: Package
+        run: |
+          cd artifacts
+          ditto -c -k --sequesterRsrc --keepParent AfriHospital-${{ matrix.rid }} AfriHospital-${{ matrix.rid }}.zip
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AfriHospital-${{ matrix.rid }}
+          path: artifacts/AfriHospital-${{ matrix.rid }}.zip
+          if-no-files-found: error
+          retention-days: 30
