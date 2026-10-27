@@ -146,7 +146,7 @@ Le fonctionnement hors ligne avec synchronisation entre plusieurs appareils néc
 
 Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
-Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite xUnit s'exécute dans GitHub Actions ; le dernier résultat vérifié pour le code est une compilation réussie sans avertissement ni erreur et 19 tests réussis.
+Le projet exécutable desktop est `AfriHospital.csproj` à la racine. Le code métier est maintenant réparti en projets .NET distincts : `src/Domain/AfriHospital.Domain.csproj`, `src/Application/AfriHospital.Application.csproj` et `src/Infrastructure/AfriHospital.Infrastructure.csproj`. La suite xUnit s'exécute dans GitHub Actions ; le commit vérifié a compilé sans avertissement ni erreur et les 23 tests ont réussi. Le lancement interactif de l'interface graphique doit encore être vérifié manuellement sur Windows/Linux.
 
 ### 1. Cloner le dépôt
 
@@ -176,7 +176,7 @@ Le chemin exact dépendra de l'organisation réelle du dépôt.
 
 ## 🔐 Sécurité et confidentialité
 
-La protection des données médicales est une priorité de conception. Un écran de connexion, le parcours de création du premier administrateur et un écran administrateur de création de comptes sont maintenant connectés au service d'authentification. Les menus sont filtrés selon les rôles, et les événements de connexion/création de compte sont journalisés. Cette protection reste un premier niveau : les autorisations doivent encore être renforcées et testées. Les patients, consultations et rendez-vous sont progressivement raccordés aux dépôts métier. Les écrans Patients et Consultations utilisent leurs dépôts dédiés ; l'écran Rendez-vous utilise maintenant un dépôt dédié qui conserve les références GUID vers les patients, les contrôles de conflits et l'historique d'annulation. La validation CI de cette dernière migration reste en attente. Le pont de compatibilité entre tables historiques et tables GUID est idempotent et les tables sources ne sont pas supprimées.
+La protection des données médicales est une priorité de conception. Un écran de connexion, le parcours de création du premier administrateur et un écran administrateur de création de comptes sont maintenant connectés au service d'authentification. Les menus sont filtrés selon les rôles, et les événements de connexion/création de compte sont journalisés. Cette protection reste un premier niveau : les autorisations doivent encore être renforcées et testées. Les patients, consultations et rendez-vous sont raccordés aux dépôts métier. Les écrans Patients et Consultations utilisent leurs dépôts dédiés ; l'écran Rendez-vous utilise un dépôt dédié qui conserve les références GUID vers les patients, les contrôles de conflits et l'historique d'annulation. La compilation et les tests de cette migration ont été validés dans GitHub Actions. Le pont de compatibilité entre tables historiques et tables GUID est idempotent et les tables sources ne sont pas supprimées.
 
 Les mesures à prévoir comprennent :
 
@@ -193,12 +193,14 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 ## 🗺️ Feuille de route
 
 ### Phase 1 — Fondations
-- [ ] Structurer le code en projets .NET séparés (l'application utilise encore un seul projet).
+- [x] Séparer le domaine, les services applicatifs et l'infrastructure en projets .NET distincts, référencés par le projet desktop `AfriHospital.csproj`.
 - [x] Créer l'interface principale Avalonia avec tableau de bord et menu des modules.
-- [ ] Mettre en place MVVM (la logique de l'interface reste principalement dans le code-behind).
+- [x] Introduire une base MVVM avec `MainWindowViewModel` et des liaisons pour le titre et le message d'état du shell (la migration des écrans métier hors du code-behind reste à poursuivre).
 - [x] Configurer une persistance SQLite locale pour les modules actuellement disponibles.
 - [x] Définir les premières entités métier Patient, Consultation et HospitalUser.
-- [ ] Vérifier le build complet et le lancement de l'application.
+- [x] Vérifier la restauration et le build Release du projet desktop et de ses projets référencés dans GitHub Actions (0 avertissement, 0 erreur).
+- [x] Exécuter les tests xUnit dans GitHub Actions : 23 réussis, 0 échec.
+- [ ] Lancer l'interface graphique et vérifier visuellement le rendu sur Windows/Linux (validation manuelle non réalisée par le CI headless).
 
 ### Phase 2 — Patients et consultations
 - [x] Enregistrer, rechercher et modifier les dossiers patients de base.
@@ -246,7 +248,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [ ] Étendre l'audit aux exports de reçus et aux futures opérations sensibles; définir les règles de conservation.
 - [ ] Tester le fonctionnement hors ligne et la synchronisation multi-postes.
 - [x] Ajouter des tests automatisés xUnit et les exécuter dans GitHub Actions.
-- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (19 tests réussis sur le commit de code vérifié).
+- [x] Confirmer qu'une compilation et les tests automatisés réussissent dans GitHub Actions (build sans avertissement ni erreur, 23 tests réussis sur le commit vérifié).
 
  > Les cases cochées indiquent uniquement que la fonctionnalité existe dans le dépôt ; elles ne signifient pas qu'elle est entièrement testée ou validée pour un usage clinique. L'authentification est reliée à l'interface principale. Le stockage des patients et consultations est unifié par un pont de compatibilité ; les écrans Patients et Consultations utilisent maintenant les dépôts métier. Le refactoring complet de l'interface n'est pas terminé : les autres modules utilisent encore `HospitalDatabase` et du SQL dans `MainWindow`.
 
@@ -452,12 +454,14 @@ AfriHospital must not be considered production-ready for clinical use until the 
 ## 🗺️ Roadmap
 
 ### Phase 1 — Foundations
-- [ ] Split the code into separate .NET projects (the application still uses a single project).
+- [x] Split the domain, application services, and infrastructure into separate .NET projects referenced by the desktop project `AfriHospital.csproj`.
 - [x] Create the main Avalonia interface with a dashboard and module navigation.
-- [ ] Implement MVVM (UI logic is still mainly in code-behind).
+- [x] Introduce an MVVM foundation with `MainWindowViewModel` and bindings for the shell title and status message (moving the remaining module screens out of code-behind is still ongoing).
 - [x] Configure local SQLite persistence for the currently available modules.
 - [x] Define the initial Patient, Consultation, and HospitalUser domain entities.
-- [ ] Verify a complete build and launch the application.
+- [x] Verify Release restore/build of the desktop project and referenced projects in GitHub Actions (0 warnings, 0 errors).
+- [x] Run xUnit tests in GitHub Actions: 23 passed, 0 failed.
+- [ ] Launch the graphical interface and visually verify it on Windows/Linux (manual validation is not performed by headless CI).
 
 ### Phase 2 — Patients and Consultations
 - [x] Register, search, and edit basic patient records.
@@ -506,7 +510,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [ ] Extend auditing to receipt exports and future sensitive operations; define retention rules.
 - [ ] Test offline operation and multi-workstation synchronization.
 - [x] Add xUnit automated tests and run them in GitHub Actions.
-- [x] Confirm a successful build and automated test run in GitHub Actions (19 tests pass on the verified code commit).
+- [x] Confirm a successful build and automated test run in GitHub Actions (clean build, 23 tests pass on the verified commit).
 
 > Checked items mean only that the functionality exists in the repository; they do not mean it is fully tested or approved for clinical use. Authentication is connected to the main UI. Patient and consultation storage is bridged to the legacy tables, and their screens now use domain repositories. The full UI refactor is still in progress because other modules continue to use `HospitalDatabase` and SQL in `MainWindow`.
 
