@@ -1,3 +1,4 @@
+using AfriHospital;
 using Xunit;
 
 namespace AfriHospital.UnitTests;
