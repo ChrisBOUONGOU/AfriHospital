@@ -21,6 +21,8 @@ public partial class MainWindow : Window
     private readonly HospitalDatabase _database = new();
     private readonly SqliteConnectionFactory _connectionFactory = new();
     private readonly SqliteHospitalUserRepository _users;
+    private readonly SqlitePatientRepository _patientRepository;
+    private readonly SqliteConsultationRepository _consultationRepository;
     private readonly AuthenticationService _authentication;
     private HospitalUser? _currentUser;
     private readonly StackPanel _content = new() { Spacing = 16 };
@@ -31,6 +33,8 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _users = new SqliteHospitalUserRepository(_connectionFactory);
+        _patientRepository = new SqlitePatientRepository(_connectionFactory);
+        _consultationRepository = new SqliteConsultationRepository(_connectionFactory);
         _authentication = new AuthenticationService(_connectionFactory, _users, new PasswordHasher());
         _ = ShowAuthenticationAsync();
     }
@@ -351,22 +355,25 @@ public partial class MainWindow : Window
     {
         if (!CanAccess("Patients")) { BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer les patients."); return; }
         BeginPage("Patients", "Créer, rechercher et modifier les dossiers administratifs de démonstration.");
-        await _database.InitializeAsync();
         var name = Field("Nom complet *"); var phone = Field("Téléphone"); var birth = Field("Date de naissance (AAAA-MM-JJ)"); var gender = Field("Sexe (optionnel)"); var notes = Field("Notes administratives (optionnel)");
         var search = Field("Rechercher par nom ou téléphone");
-        var selectedId = (long?)null;
+        Guid? selectedId = null;
+        string selectedNumber = "";
         var list = new ListBox { MinHeight = 220 };
         async Task Refresh()
         {
-            var rows = await _database.SearchPatientsAsync(search.Text ?? "");
-            list.ItemsSource = rows;
+            var rows = await _patientRepository.SearchAsync(search.Text ?? "");
+            list.ItemsSource = rows.Select(p => new DomainPatientRow(p)).ToList();
         }
         list.SelectionChanged += (_, _) =>
         {
-            if (list.SelectedItem is PatientRow p)
+            if (list.SelectedItem is DomainPatientRow row)
             {
-                selectedId = p.Id; name.Text = p.Name; phone.Text = p.Phone;
-                birth.Text = p.BirthDate; gender.Text = p.Gender; notes.Text = p.Notes;
+                var p = row.Patient;
+                selectedId = p.Id; selectedNumber = p.PatientNumber;
+                name.Text = p.FullName; phone.Text = p.PhoneNumber ?? "";
+                birth.Text = p.DateOfBirth?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture) ?? "";
+                gender.Text = p.Sex ?? ""; notes.Text = p.Notes ?? "";
             }
         };
         search.TextChanged += async (_, _) => await SafeRunAsync(Refresh);
@@ -377,17 +384,36 @@ public partial class MainWindow : Window
             { SetStatus("Le nom est obligatoire et ne doit pas dépasser 150 caractères.", true); return; }
             if (!string.IsNullOrWhiteSpace(phone.Text) && phone.Text.Trim().Length > 30)
             { SetStatus("Le numéro de téléphone ne doit pas dépasser 30 caractères.", true); return; }
-            if (!string.IsNullOrWhiteSpace(birth.Text) &&
-                (!DateOnly.TryParseExact(birth.Text.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var birthDate) ||
-                 birthDate > DateOnly.FromDateTime(DateTime.Today)))
-            { SetStatus("Date de naissance invalide. Utilisez AAAA-MM-JJ et une date non future.", true); return; }
-            await _database.SavePatientAsync(selectedId, name.Text.Trim(), phone.Text ?? "", birth.Text ?? "", gender.Text ?? "", notes.Text ?? "");
-            await _database.WriteAuditAsync(selectedId is null ? "PATIENT_CREATED" : "PATIENT_UPDATED", "patient", _currentUser?.Username);
-            selectedId = null; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = "";
+            DateOnly? birthDate = null;
+            if (!string.IsNullOrWhiteSpace(birth.Text))
+            {
+                if (!DateOnly.TryParseExact(birth.Text.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedBirth) || parsedBirth > DateOnly.FromDateTime(DateTime.Today))
+                { SetStatus("Date de naissance invalide. Utilisez AAAA-MM-JJ et une date non future.", true); return; }
+                birthDate = parsedBirth;
+            }
+            var parts = name.Text.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+            var patient = new Patient
+            {
+                Id = selectedId ?? Guid.Empty,
+                PatientNumber = string.IsNullOrWhiteSpace(selectedNumber) ? "PAT-" + Guid.NewGuid().ToString("N")[..8].ToUpperInvariant() : selectedNumber,
+                FirstName = parts[0],
+                LastName = parts.Length > 1 ? parts[1] : "",
+                PhoneNumber = phone.Text?.Trim(),
+                DateOfBirth = birthDate,
+                Sex = gender.Text?.Trim(),
+                Notes = notes.Text ?? "",
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            var isUpdate = selectedId.HasValue;
+            if (isUpdate) await _patientRepository.UpdateAsync(patient);
+            else await _patientRepository.AddAsync(patient);
+            await _database.WriteAuditAsync(isUpdate ? "PATIENT_UPDATED" : "PATIENT_CREATED", "patient", _currentUser?.Username);
+            selectedId = null; selectedNumber = ""; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = "";
+            list.SelectedItem = null;
             await Refresh(); SetStatus("Patient enregistré dans la base locale.");
         });
         var clear = ActionButton("Nouveau / Effacer", false);
-        clear.Click += async (_, _) => { selectedId = null; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = ""; list.SelectedItem = null; await Task.CompletedTask; };
+        clear.Click += async (_, _) => { selectedId = null; selectedNumber = ""; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = ""; list.SelectedItem = null; await Task.CompletedTask; };
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
         {
             Heading("Fiche patient"), name, phone, birth, gender, notes,
@@ -532,21 +558,44 @@ public partial class MainWindow : Window
     {
         if (!CanAccess("Consultations")) { BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer les consultations."); return; }
         BeginPage("Consultations", "Enregistrement administratif des consultations. Les décisions médicales doivent rester sous responsabilité d’un professionnel.");
-        await _database.InitializeAsync();
         var patients = new ComboBox { MinWidth = 260, PlaceholderText = "Sélectionner un patient" };
-        patients.ItemsSource = await _database.GetPatientChoicesAsync();
+        async Task RefreshPatients()
+        {
+            var patientRows = await _patientRepository.SearchAsync("");
+            patients.ItemsSource = patientRows.Select(p => new DomainPatientRow(p)).ToList();
+        }
+        await RefreshPatients();
         var date = Field("Date et heure (AAAA-MM-JJ HH:MM)"); var clinician = Field("Professionnel de santé"); var summary = Field("Résumé / motif de consultation");
         var list = new ListBox { MinHeight = 220 };
-        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT c.id, COALESCE(p.name, c.patient_name), c.consulted_at, c.clinician, c.summary FROM consultations c LEFT JOIN patients p ON p.id = c.patient_id ORDER BY c.consulted_at DESC", r => $"#{r.GetInt64(0)} · {r.GetString(1)} · {r.GetString(2)} · {r.GetString(3)} — {r.GetString(4)}");
+        async Task Refresh()
+        {
+            var allPatients = await _patientRepository.SearchAsync("");
+            var names = allPatients.ToDictionary(p => p.Id, p => p.FullName);
+            var consultations = await _consultationRepository.GetAllAsync();
+            list.ItemsSource = consultations.Select(c =>
+            {
+                var patientName = names.TryGetValue(c.PatientId, out var found) ? found : "Patient introuvable";
+                var details = string.Join(" — ", new[] { c.ClinicalNotes, c.Diagnosis }.Where(v => !string.IsNullOrWhiteSpace(v)));
+                return $"#{c.Id.ToString("N")[..8]} · {patientName} · {c.ConsultationDateUtc.ToLocalTime():yyyy-MM-dd HH:mm} · {c.PractitionerName} — {details}";
+            }).ToList();
+        }
         var save = ActionButton("Enregistrer la consultation");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
-            if (patients.SelectedItem is not PatientRow selectedPatient || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Sélectionnez un patient et indiquez la date.", true); return; }
+            if (patients.SelectedItem is not DomainPatientRow selectedPatient || string.IsNullOrWhiteSpace(date.Text)) { SetStatus("Sélectionnez un patient et indiquez la date.", true); return; }
             if (!DateTime.TryParseExact(date.Text.Trim(), new[] { "yyyy-MM-dd HH:mm", "yyyy-MM-dd H:mm" }, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var consultedAt)) { SetStatus("Date invalide. Format attendu : AAAA-MM-JJ HH:MM.", true); return; }
             if (string.IsNullOrWhiteSpace(clinician.Text) || string.IsNullOrWhiteSpace(summary.Text))
             { SetStatus("Le professionnel de santé et le résumé sont obligatoires.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary) VALUES($id,$p,$d,$c,$s)", ("$id", selectedPatient.Id), ("$p", selectedPatient.Name), ("$d", consultedAt.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)), ("$c", clinician.Text.Trim()), ("$s", summary.Text.Trim()));
-            await _database.WriteAuditAsync("CONSULTATION_CREATED", "consultation", _currentUser?.Username);
+            if (_currentUser is null) { SetStatus("La session utilisateur a expiré. Reconnectez-vous.", true); return; }
+            await _consultationRepository.AddAsync(new Consultation
+            {
+                PatientId = selectedPatient.Patient.Id,
+                PractitionerId = _currentUser.Id,
+                PractitionerName = clinician.Text.Trim(),
+                ConsultationDateUtc = DateTime.SpecifyKind(consultedAt, DateTimeKind.Local).ToUniversalTime(),
+                ClinicalNotes = summary.Text.Trim()
+            });
+            await _database.WriteAuditAsync("CONSULTATION_CREATED", "consultation", _currentUser.Username);
             patients.SelectedItem = null; date.Text = clinician.Text = summary.Text = ""; await Refresh(); SetStatus("Consultation enregistrée.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle consultation"), patients, date, clinician, summary, save } }));
@@ -1780,6 +1829,11 @@ internal sealed record AppointmentRow(long Id, long PatientId, string PatientNam
 internal sealed record PatientRow(long Id, string Name, string Phone, string BirthDate, string Gender, string Notes)
 {
     public override string ToString() => $"#{Id} · {Name} · {Phone}";
+}
+
+internal sealed record DomainPatientRow(Patient Patient)
+{
+    public override string ToString() => $"{Patient.FullName} · {Patient.PhoneNumber}";
 }
 
 internal sealed record RefundChoice(long PaymentId, long InvoiceId, string PatientName, decimal OriginalAmount, decimal Refunded, string OriginalMethod)
