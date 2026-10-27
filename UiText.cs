@@ -210,7 +210,7 @@ internal static class UiText
         ["Rendez-vous enregistrés"] = "Saved appointments",
         ["Créer une sauvegarde"] = "Create backup",
         ["Sauvegarde créée : "] = "Backup created: ",
-    }
+    };
 
     public static string Language { get; private set; } = "fr";
     public static bool IsEnglish => Language == "en";
