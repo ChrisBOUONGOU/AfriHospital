@@ -528,25 +528,147 @@ public partial class MainWindow : Window
     private async Task ShowMedicinesAsync()
     {
         if (!CanAccess("Pharmacie / Stocks")) { BeginPage("Accès refusé", "Votre rôle ne permet pas de gérer la pharmacie."); return; }
-        BeginPage("Pharmacie et stocks", "Catalogue minimal et suivi des quantités. La gestion des lots, péremptions et dispensations devra être ajoutée avant utilisation réelle.");
+        BeginPage("Pharmacie et stocks", "Suivi des lots, entrées/sorties, fournisseurs et péremptions. Les lots anciens sans date connue sont signalés comme inconnus.");
         await _database.InitializeAsync();
-        var name = Field("Nom du médicament"); var quantity = Field("Quantité en stock"); var threshold = Field("Seuil d’alerte"); var unit = Field("Unité (boîte, flacon…)"); var price = Field("Prix unitaire (nombre)");
+
+        var name = Field("Nom du médicament");
+        var quantity = Field("Stock initial (entier positif ou nul)");
+        var threshold = Field("Seuil d’alerte");
+        var unit = Field("Unité (boîte, flacon…)");
+        var price = Field("Prix unitaire de vente (ex. 2.50)");
+        var medicines = new ComboBox { MinWidth = 280, PlaceholderText = "Sélectionner un médicament" };
+        var operation = new ComboBox { MinWidth = 240, ItemsSource = new[] { "Entrée de stock", "Sortie de stock" }, SelectedIndex = 0 };
+        var batchNumber = Field("Numéro de lot (obligatoire pour une entrée)");
+        var expiry = Field("Date de péremption AAAA-MM-JJ (entrée)");
+        var supplier = Field("Fournisseur (entrée)");
+        var movementQuantity = Field("Quantité du mouvement");
+        var unitCost = Field("Coût unitaire d’achat (ex. 1.20)");
+        var note = Field("Note / motif (facultatif)");
+        var batches = new ComboBox { MinWidth = 280, PlaceholderText = "Choisir un lot pour la sortie" };
         var list = new ListBox { MinHeight = 240 };
-        async Task Refresh() => list.ItemsSource = await _database.GetRowsAsync("SELECT id, name, quantity, unit, unit_price, min_quantity FROM medicines ORDER BY name", r => $"{r.GetString(1)} · stock {r.GetInt32(2)} {r.GetString(3)} · prix {r.GetDecimal(4):0.00} · seuil {r.GetInt32(5)}");
-        var save = ActionButton("Ajouter le médicament");
-        save.Click += async (_, _) => await SafeRunAsync(async () =>
+
+        async Task RefreshMedicines(long? keepSelected = null)
         {
-            if (string.IsNullOrWhiteSpace(name.Text) || !int.TryParse(quantity.Text, out var q) || !int.TryParse(threshold.Text, out var min) || !decimal.TryParse(price.Text, out var p) || q < 0 || min < 0 || p < 0)
-            { SetStatus("Renseignez le nom, des quantités positives et un prix valide.", true); return; }
+            var choices = await _database.GetMedicineChoicesAsync();
+            medicines.ItemsSource = choices;
+            if (keepSelected.HasValue)
+                medicines.SelectedItem = choices.FirstOrDefault(m => m.Id == keepSelected.Value);
+            else if (choices.Count > 0 && medicines.SelectedItem is null)
+                medicines.SelectedIndex = 0;
+            await RefreshStockList();
+            await RefreshBatches();
+        }
+
+        async Task RefreshStockList()
+        {
+            list.ItemsSource = await _database.GetRowsAsync("""
+                SELECT m.name, m.quantity, m.unit, m.unit_price, m.min_quantity,
+                       (SELECT COUNT(*) FROM medicine_batches b WHERE b.medicine_id=m.id),
+                       (SELECT COUNT(*) FROM medicine_batches b WHERE b.medicine_id=m.id
+                         AND b.expiry_date IS NOT NULL AND b.expiry_date < $today AND b.quantity > 0)
+                FROM medicines m ORDER BY m.name
+                """, r => $"{r.GetString(0)} · stock {r.GetInt32(1)} {r.GetString(2)} · prix {r.GetDecimal(3):0.00} · seuil {r.GetInt32(4)} · lots {r.GetInt32(5)} · lots périmés {r.GetInt32(6)}",
+                ("$today", DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        async Task RefreshBatches()
+        {
+            if (medicines.SelectedItem is not MedicineChoice selected)
+            {
+                batches.ItemsSource = Array.Empty<MedicineBatchChoice>();
+                return;
+            }
+            var items = await _database.GetBatchChoicesAsync(selected.Id);
+            batches.ItemsSource = items;
+            if (items.Count > 0) batches.SelectedIndex = 0;
+        }
+
+        medicines.SelectionChanged += async (_, _) => await SafeRunAsync(RefreshBatches);
+        operation.SelectionChanged += (_, _) =>
+        {
+            var isInbound = operation.SelectedItem as string == "Entrée de stock";
+            batchNumber.IsVisible = expiry.IsVisible = supplier.IsVisible = unitCost.IsVisible = isInbound;
+            batches.IsVisible = !isInbound;
+        };
+
+        var create = ActionButton("Ajouter le médicament");
+        create.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (string.IsNullOrWhiteSpace(name.Text) ||
+                !int.TryParse(quantity.Text, out var initialQuantity) ||
+                !int.TryParse(threshold.Text, out var min) ||
+                !decimal.TryParse(price.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var sellPrice) ||
+                initialQuantity < 0 || min < 0 || sellPrice < 0)
+            { SetStatus("Renseignez le nom, des quantités positives et un prix valide (point décimal).", true); return; }
             if (name.Text.Trim().Length > 150 || (unit.Text?.Trim().Length ?? 0) > 40)
             { SetStatus("Le nom du médicament ou l'unité est trop long.", true); return; }
-            await _database.ExecuteAsync("INSERT INTO medicines(name, quantity, unit, unit_price, min_quantity) VALUES($n,$q,$u,$p,$m)", ("$n", name.Text.Trim()), ("$q", q), ("$u", string.IsNullOrWhiteSpace(unit.Text) ? "unité" : unit.Text.Trim()), ("$p", p), ("$m", min));
+            var newId = await _database.AddMedicineAsync(name.Text.Trim(), initialQuantity,
+                string.IsNullOrWhiteSpace(unit.Text) ? "unité" : unit.Text.Trim(), sellPrice, min);
             await _database.WriteAuditAsync("MEDICINE_CREATED", "medicine");
-            name.Text = quantity.Text = threshold.Text = unit.Text = price.Text = ""; await Refresh(); SetStatus("Médicament ajouté.");
+            name.Text = quantity.Text = threshold.Text = unit.Text = price.Text = "";
+            await RefreshMedicines(newId);
+            SetStatus(initialQuantity > 0
+                ? "Médicament ajouté. Le stock initial a été conservé dans un lot historique sans date de péremption connue."
+                : "Médicament ajouté.");
         });
-        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Ajouter un médicament"), name, quantity, threshold, unit, price, save } }));
-        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Stock"), list } }));
-        await Refresh();
+
+        var recordMovement = ActionButton("Enregistrer le mouvement", false);
+        recordMovement.Click += async (_, _) => await SafeRunAsync(async () =>
+        {
+            if (medicines.SelectedItem is not MedicineChoice selected ||
+                !int.TryParse(movementQuantity.Text, out var movedQuantity) || movedQuantity <= 0)
+            { SetStatus("Sélectionnez un médicament et une quantité entière positive.", true); return; }
+            if ((note.Text?.Trim().Length ?? 0) > 250)
+            { SetStatus("La note ne doit pas dépasser 250 caractères.", true); return; }
+
+            var inbound = operation.SelectedItem as string == "Entrée de stock";
+            string? batch = null;
+            string? expiryDate = null;
+            string? supplierName = null;
+            decimal cost = 0;
+            long? batchId = null;
+            if (inbound)
+            {
+                if (string.IsNullOrWhiteSpace(batchNumber.Text) || batchNumber.Text.Trim().Length > 100 ||
+                    string.IsNullOrWhiteSpace(expiry.Text) ||
+                    !DateOnly.TryParseExact(expiry.Text.Trim(), "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsedExpiry) ||
+                    parsedExpiry < DateOnly.FromDateTime(DateTime.Today))
+                { SetStatus("Pour une entrée, indiquez un numéro de lot (100 caractères maximum) et une péremption valide non passée (AAAA-MM-JJ).", true); return; }
+                if ((supplier.Text?.Trim().Length ?? 0) > 150 ||
+                    !decimal.TryParse(unitCost.Text, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out cost) || cost < 0)
+                { SetStatus("Le fournisseur est limité à 150 caractères et le coût doit être un nombre positif ou nul (point décimal).", true); return; }
+                batch = batchNumber.Text.Trim();
+                expiryDate = parsedExpiry.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture);
+                supplierName = supplier.Text?.Trim() ?? "";
+            }
+            else
+            {
+                if (batches.SelectedItem is not MedicineBatchChoice selectedBatch)
+                { SetStatus("Sélectionnez le lot dont vous souhaitez retirer du stock.", true); return; }
+                batchId = selectedBatch.Id;
+            }
+
+            await _database.RecordStockMovementAsync(selected.Id, inbound, movedQuantity, batch, expiryDate,
+                supplierName, cost, batchId, note.Text?.Trim() ?? "");
+            movementQuantity.Text = note.Text = "";
+            batchNumber.Text = expiry.Text = supplier.Text = unitCost.Text = "";
+            await RefreshMedicines(selected.Id);
+            SetStatus(inbound ? "Entrée de stock enregistrée." : "Sortie de stock enregistrée.");
+        });
+
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            Heading("Ajouter un médicament"), name, quantity, threshold, unit, price, create,
+            new TextBlock { Text = "Un stock initial déjà connu est conservé, mais sa date de péremption reste inconnue jusqu'à un inventaire physique.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#6B7280") }
+        }}));
+        _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            Heading("Entrées et sorties de stock"), medicines, operation, batchNumber, expiry, supplier, batches,
+            movementQuantity, unitCost, note, recordMovement
+        }}));
+        _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Stock, seuils et lots périmés"), list } }));
+        operation.SelectedIndex = 0;
+        await RefreshMedicines();
     }
 
     private async Task ShowBackupAsync()
@@ -688,11 +810,50 @@ CREATE TABLE IF NOT EXISTS patients(id INTEGER PRIMARY KEY AUTOINCREMENT, name T
 CREATE TABLE IF NOT EXISTS appointments(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NULL REFERENCES patients(id), patient_name TEXT NOT NULL, scheduled_at TEXT NOT NULL, reason TEXT NOT NULL DEFAULT '', status TEXT NOT NULL DEFAULT 'Planifié', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS consultations(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER NULL REFERENCES patients(id), patient_name TEXT NOT NULL, consulted_at TEXT NOT NULL, clinician TEXT NOT NULL DEFAULT '', summary TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS medicines(id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, quantity INTEGER NOT NULL DEFAULT 0, unit TEXT NOT NULL DEFAULT 'unité', unit_price NUMERIC NOT NULL DEFAULT 0, min_quantity INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS medicine_batches(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ medicine_id INTEGER NOT NULL REFERENCES medicines(id) ON DELETE CASCADE,
+ batch_number TEXT NOT NULL,
+ supplier TEXT NOT NULL DEFAULT '',
+ quantity INTEGER NOT NULL CHECK(quantity >= 0),
+ expiry_date TEXT NULL,
+ unit_cost NUMERIC NOT NULL DEFAULT 0 CHECK(unit_cost >= 0),
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(medicine_id, batch_number)
+);
+CREATE INDEX IF NOT EXISTS ix_medicine_batches_expiry ON medicine_batches(expiry_date, quantity);
+CREATE TABLE IF NOT EXISTS medicine_stock_movements(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ medicine_id INTEGER NOT NULL REFERENCES medicines(id),
+ batch_id INTEGER NULL REFERENCES medicine_batches(id),
+ movement_type TEXT NOT NULL CHECK(movement_type IN ('INITIAL','IN','OUT')),
+ quantity INTEGER NOT NULL CHECK(quantity > 0),
+ note TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_medicine_movements_medicine_date ON medicine_stock_movements(medicine_id, created_at);
 CREATE TABLE IF NOT EXISTS invoices(id INTEGER PRIMARY KEY AUTOINCREMENT, patient_name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', amount NUMERIC NOT NULL, currency TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'À payer', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS payments(id INTEGER PRIMARY KEY AUTOINCREMENT, invoice_id INTEGER NOT NULL REFERENCES invoices(id), amount NUMERIC NOT NULL CHECK(amount > 0), method TEXT NOT NULL, paid_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS ix_payments_invoice ON payments(invoice_id);
 CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, entity TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);";
         await command.ExecuteNonQueryAsync();
+        // Preserve pre-existing quantities as a legacy batch; do not invent an expiry date.
+        await using (var legacyBatches = connection.CreateCommand())
+        {
+            legacyBatches.CommandText = """
+                INSERT OR IGNORE INTO medicine_batches(medicine_id, batch_number, supplier, quantity, expiry_date, unit_cost)
+                SELECT m.id, 'LEGACY-' || m.id, 'Stock initial existant', m.quantity, NULL, m.unit_price
+                FROM medicines m
+                WHERE m.quantity > 0
+                  AND NOT EXISTS (SELECT 1 FROM medicine_batches b WHERE b.medicine_id=m.id);
+                INSERT INTO medicine_stock_movements(medicine_id, batch_id, movement_type, quantity, note)
+                SELECT b.medicine_id, b.id, 'INITIAL', b.quantity, 'Stock préexistant migré; péremption inconnue'
+                FROM medicine_batches b
+                WHERE b.batch_number = 'LEGACY-' || b.medicine_id
+                  AND NOT EXISTS (SELECT 1 FROM medicine_stock_movements sm WHERE sm.batch_id=b.id);
+                """;
+            await legacyBatches.ExecuteNonQueryAsync();
+        }
         await EnsureColumnAsync(connection, "appointments", "patient_id", "INTEGER NULL REFERENCES patients(id)");
         await EnsureColumnAsync(connection, "consultations", "patient_id", "INTEGER NULL REFERENCES patients(id)");
         await using (var migrate = connection.CreateCommand())
@@ -788,6 +949,213 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
         var command = connection.CreateCommand(); command.CommandText = sql;
         return Convert.ToInt64(await command.ExecuteScalarAsync());
+    }
+
+    public async Task<List<MedicineChoice>> GetMedicineChoicesAsync()
+    {
+        var items = new List<MedicineChoice>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT id, name, quantity, unit, min_quantity FROM medicines ORDER BY name;";
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            items.Add(new MedicineChoice(reader.GetInt64(0), reader.GetString(1), reader.GetInt32(2), reader.GetString(3), reader.GetInt32(4)));
+        return items;
+    }
+
+    public async Task<List<MedicineBatchChoice>> GetBatchChoicesAsync(long medicineId)
+    {
+        var items = new List<MedicineBatchChoice>();
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id, medicine_id, batch_number, quantity, expiry_date, supplier
+            FROM medicine_batches
+            WHERE medicine_id=$medicineId AND quantity > 0
+            ORDER BY CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END, expiry_date, batch_number;
+            """;
+        command.Parameters.AddWithValue("$medicineId", medicineId);
+        await using var reader = await command.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            items.Add(new MedicineBatchChoice(reader.GetInt64(0), reader.GetInt64(1), reader.GetString(2),
+                reader.GetInt32(3), reader.IsDBNull(4) ? null : reader.GetString(4), reader.GetString(5)));
+        return items;
+    }
+
+    public async Task<long> AddMedicineAsync(string name, int initialQuantity, string unit, decimal unitPrice, int minimumQuantity)
+    {
+        if (string.IsNullOrWhiteSpace(name) || initialQuantity < 0 || minimumQuantity < 0 || unitPrice < 0)
+            throw new ArgumentException("Les données du médicament sont invalides.");
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+        await using (var insert = connection.CreateCommand())
+        {
+            insert.Transaction = transaction;
+            insert.CommandText = "INSERT INTO medicines(name, quantity, unit, unit_price, min_quantity) VALUES($name,$quantity,$unit,$price,$minimum);";
+            insert.Parameters.AddWithValue("$name", name.Trim());
+            insert.Parameters.AddWithValue("$quantity", initialQuantity);
+            insert.Parameters.AddWithValue("$unit", unit.Trim());
+            insert.Parameters.AddWithValue("$price", unitPrice);
+            insert.Parameters.AddWithValue("$minimum", minimumQuantity);
+            await insert.ExecuteNonQueryAsync();
+        }
+        await using var idCommand = connection.CreateCommand();
+        idCommand.Transaction = transaction;
+        idCommand.CommandText = "SELECT last_insert_rowid();";
+        var id = Convert.ToInt64(await idCommand.ExecuteScalarAsync());
+        if (initialQuantity > 0)
+        {
+            long batchId;
+            await using (var batch = connection.CreateCommand())
+            {
+                batch.Transaction = transaction;
+                batch.CommandText = "INSERT INTO medicine_batches(medicine_id,batch_number,supplier,quantity,expiry_date,unit_cost) VALUES($id,$number,$supplier,$quantity,NULL,$cost);";
+                batch.Parameters.AddWithValue("$id", id);
+                batch.Parameters.AddWithValue("$number", "LEGACY-" + id);
+                batch.Parameters.AddWithValue("$supplier", "Stock initial existant");
+                batch.Parameters.AddWithValue("$quantity", initialQuantity);
+                batch.Parameters.AddWithValue("$cost", unitPrice);
+                await batch.ExecuteNonQueryAsync();
+            }
+            await using (var batchIdCommand = connection.CreateCommand())
+            {
+                batchIdCommand.Transaction = transaction;
+                batchIdCommand.CommandText = "SELECT last_insert_rowid();";
+                batchId = Convert.ToInt64(await batchIdCommand.ExecuteScalarAsync());
+            }
+            await using var movement = connection.CreateCommand();
+            movement.Transaction = transaction;
+            movement.CommandText = "INSERT INTO medicine_stock_movements(medicine_id,batch_id,movement_type,quantity,note) VALUES($id,$batch,'INITIAL',$quantity,'Stock initial; péremption à vérifier');";
+            movement.Parameters.AddWithValue("$id", id);
+            movement.Parameters.AddWithValue("$batch", batchId);
+            movement.Parameters.AddWithValue("$quantity", initialQuantity);
+            await movement.ExecuteNonQueryAsync();
+        }
+        transaction.Commit();
+        return id;
+    }
+
+    public async Task RecordStockMovementAsync(long medicineId, bool inbound, int quantity, string? batchNumber,
+        string? expiryDate, string? supplier, decimal unitCost, long? selectedBatchId, string note)
+    {
+        if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity), "La quantité du mouvement doit être positive.");
+        await using var connection = new SqliteConnection(ConnectionString);
+        await connection.OpenAsync();
+        using var transaction = connection.BeginTransaction();
+        long batchId;
+        if (inbound)
+        {
+            if (string.IsNullOrWhiteSpace(batchNumber) || string.IsNullOrWhiteSpace(expiryDate))
+                throw new ArgumentException("Le numéro de lot et la date de péremption sont obligatoires pour une entrée.");
+            long? existingId = null;
+            int existingQuantity = 0;
+            string? existingExpiry = null;
+            string? existingSupplier = null;
+            decimal existingCost = 0;
+            await using (var find = connection.CreateCommand())
+            {
+                find.Transaction = transaction;
+                find.CommandText = "SELECT id,quantity,expiry_date,supplier,unit_cost FROM medicine_batches WHERE medicine_id=$medicine AND batch_number=$number;";
+                find.Parameters.AddWithValue("$medicine", medicineId);
+                find.Parameters.AddWithValue("$number", batchNumber.Trim());
+                await using var reader = await find.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
+                {
+                    existingId = reader.GetInt64(0);
+                    existingQuantity = reader.GetInt32(1);
+                    existingExpiry = reader.IsDBNull(2) ? null : reader.GetString(2);
+                    existingSupplier = reader.GetString(3);
+                    existingCost = reader.GetDecimal(4);
+                }
+            }
+            if (existingId.HasValue)
+            {
+                if (existingExpiry != expiryDate || !string.Equals(existingSupplier, supplier ?? "", StringComparison.Ordinal) || existingCost != unitCost)
+                    throw new InvalidOperationException("Ce numéro de lot existe déjà avec une autre péremption, un autre fournisseur ou un autre coût.");
+                batchId = existingId.Value;
+                await using var updateBatch = connection.CreateCommand();
+                updateBatch.Transaction = transaction;
+                updateBatch.CommandText = "UPDATE medicine_batches SET quantity=$quantity WHERE id=$id;";
+                updateBatch.Parameters.AddWithValue("$quantity", checked(existingQuantity + quantity));
+                updateBatch.Parameters.AddWithValue("$id", batchId);
+                await updateBatch.ExecuteNonQueryAsync();
+            }
+            else
+            {
+                await using var insertBatch = connection.CreateCommand();
+                insertBatch.Transaction = transaction;
+                insertBatch.CommandText = "INSERT INTO medicine_batches(medicine_id,batch_number,supplier,quantity,expiry_date,unit_cost) VALUES($medicine,$number,$supplier,$quantity,$expiry,$cost);";
+                insertBatch.Parameters.AddWithValue("$medicine", medicineId);
+                insertBatch.Parameters.AddWithValue("$number", batchNumber.Trim());
+                insertBatch.Parameters.AddWithValue("$supplier", supplier ?? "");
+                insertBatch.Parameters.AddWithValue("$quantity", quantity);
+                insertBatch.Parameters.AddWithValue("$expiry", expiryDate);
+                insertBatch.Parameters.AddWithValue("$cost", unitCost);
+                await insertBatch.ExecuteNonQueryAsync();
+                await using var idCommand = connection.CreateCommand();
+                idCommand.Transaction = transaction;
+                idCommand.CommandText = "SELECT last_insert_rowid();";
+                batchId = Convert.ToInt64(await idCommand.ExecuteScalarAsync());
+            }
+        }
+        else
+        {
+            if (!selectedBatchId.HasValue) throw new ArgumentException("Sélectionnez un lot pour la sortie.");
+            batchId = selectedBatchId.Value;
+            await using var find = connection.CreateCommand();
+            find.Transaction = transaction;
+            find.CommandText = "SELECT quantity,expiry_date FROM medicine_batches WHERE id=$batch AND medicine_id=$medicine;";
+            find.Parameters.AddWithValue("$batch", batchId);
+            find.Parameters.AddWithValue("$medicine", medicineId);
+            await using var reader = await find.ExecuteReaderAsync();
+            if (!await reader.ReadAsync()) throw new KeyNotFoundException("Lot introuvable pour ce médicament.");
+            var available = reader.GetInt32(0);
+            var expiry = reader.IsDBNull(1) ? null : reader.GetString(1);
+            if (expiry is not null && string.CompareOrdinal(expiry, DateOnly.FromDateTime(DateTime.Today).ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)) < 0)
+                throw new InvalidOperationException("Impossible de sortir un lot périmé.");
+            if (quantity > available) throw new InvalidOperationException("La sortie dépasse la quantité disponible dans ce lot.");
+            await reader.DisposeAsync();
+            await using var updateBatch = connection.CreateCommand();
+            updateBatch.Transaction = transaction;
+            updateBatch.CommandText = "UPDATE medicine_batches SET quantity=quantity-$quantity WHERE id=$batch;";
+            updateBatch.Parameters.AddWithValue("$quantity", quantity);
+            updateBatch.Parameters.AddWithValue("$batch", batchId);
+            await updateBatch.ExecuteNonQueryAsync();
+        }
+
+        await using (var updateMedicine = connection.CreateCommand())
+        {
+            updateMedicine.Transaction = transaction;
+            updateMedicine.CommandText = inbound
+                ? "UPDATE medicines SET quantity=quantity+$quantity WHERE id=$id;"
+                : "UPDATE medicines SET quantity=quantity-$quantity WHERE id=$id AND quantity >= $quantity;";
+            updateMedicine.Parameters.AddWithValue("$quantity", quantity);
+            updateMedicine.Parameters.AddWithValue("$id", medicineId);
+            if (await updateMedicine.ExecuteNonQueryAsync() == 0)
+                throw new InvalidOperationException("Le médicament est introuvable ou le stock est insuffisant.");
+        }
+        await using (var movement = connection.CreateCommand())
+        {
+            movement.Transaction = transaction;
+            movement.CommandText = "INSERT INTO medicine_stock_movements(medicine_id,batch_id,movement_type,quantity,note) VALUES($medicine,$batch,$type,$quantity,$note);";
+            movement.Parameters.AddWithValue("$medicine", medicineId);
+            movement.Parameters.AddWithValue("$batch", batchId);
+            movement.Parameters.AddWithValue("$type", inbound ? "IN" : "OUT");
+            movement.Parameters.AddWithValue("$quantity", quantity);
+            movement.Parameters.AddWithValue("$note", note);
+            await movement.ExecuteNonQueryAsync();
+        }
+        await using (var audit = connection.CreateCommand())
+        {
+            audit.Transaction = transaction;
+            audit.CommandText = "INSERT INTO audit_log(action,entity) VALUES($action,'medicine');";
+            audit.Parameters.AddWithValue("$action", inbound ? "STOCK_IN" : "STOCK_OUT");
+            await audit.ExecuteNonQueryAsync();
+        }
+        transaction.Commit();
     }
 
     public async Task<List<InvoiceChoice>> GetInvoiceChoicesAsync()
@@ -929,11 +1297,12 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         await command.ExecuteNonQueryAsync();
     }
 
-    public async Task<List<string>> GetRowsAsync(string sql, Func<SqliteDataReader,string> map)
+    public async Task<List<string>> GetRowsAsync(string sql, Func<SqliteDataReader,string> map, params (string Name, object Value)[] parameters)
     {
         var rows = new List<string>();
         await using var connection = new SqliteConnection(ConnectionString); await connection.OpenAsync();
         await using var command = connection.CreateCommand(); command.CommandText = sql;
+        foreach (var (name, value) in parameters) command.Parameters.AddWithValue(name, value ?? DBNull.Value);
         await using var reader = await command.ExecuteReaderAsync();
         while (await reader.ReadAsync()) rows.Add(map(reader));
         return rows;
@@ -1020,6 +1389,16 @@ UPDATE consultations SET patient_id = (SELECT p.id FROM patients p WHERE p.name 
         else
             await ExecuteAsync("UPDATE patients SET name=$n, phone=$p, birth_date=$b, gender=$g, notes=$notes WHERE id=$id", ("$n", name), ("$p", phone), ("$b", birthDate), ("$g", gender), ("$notes", notes), ("$id", id.Value));
     }
+}
+
+internal sealed record MedicineChoice(long Id, string Name, int Quantity, string Unit, int MinimumQuantity)
+{
+    public override string ToString() => $"{Name} · stock {Quantity} {Unit} · seuil {MinimumQuantity}";
+}
+
+internal sealed record MedicineBatchChoice(long Id, long MedicineId, string BatchNumber, int Quantity, string? ExpiryDate, string Supplier)
+{
+    public override string ToString() => $"{BatchNumber} · quantité {Quantity} · péremption {ExpiryDate ?? "inconnue"} · {Supplier}";
 }
 
 internal sealed record AppointmentRow(long Id, long PatientId, string PatientName, string ScheduledAt, string Reason, string Status)
