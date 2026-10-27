@@ -24,6 +24,9 @@ public static class LegacyDomainDataMigration
             return 0;
         }
 
+        imported += await ExportDomainOnlyPatientsAsync(connection, transaction, cancellationToken);
+        imported += await ExportDomainOnlyConsultationsAsync(connection, transaction, cancellationToken);
+
         var legacyPatients = new List<LegacyPatient>();
         await using (var read = connection.CreateCommand())
         {
@@ -51,9 +54,16 @@ public static class LegacyDomainDataMigration
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
-                INSERT OR IGNORE INTO domain_patients
+                INSERT INTO domain_patients
                     (id, patient_number, first_name, last_name, date_of_birth, sex, phone_number, created_at_utc, legacy_patient_id)
-                VALUES ($id, $number, $first, $last, $birth, $sex, $phone, $created, $legacyId);
+                VALUES ($id, $number, $first, $last, $birth, $sex, $phone, $created, $legacyId)
+                ON CONFLICT(legacy_patient_id) DO UPDATE SET
+                    first_name=excluded.first_name,
+                    last_name=excluded.last_name,
+                    date_of_birth=excluded.date_of_birth,
+                    sex=excluded.sex,
+                    phone_number=excluded.phone_number,
+                    created_at_utc=excluded.created_at_utc;
                 """;
             insert.Parameters.AddWithValue("$id", StableGuid($"legacy-patient:{legacy.Id}").ToString("D"));
             insert.Parameters.AddWithValue("$number", $"LEGACY-{legacy.Id}");
@@ -97,10 +107,15 @@ public static class LegacyDomainDataMigration
                 await using var insert = connection.CreateCommand();
                 insert.Transaction = (SqliteTransaction)transaction;
                 insert.CommandText = """
-                    INSERT OR IGNORE INTO domain_consultations
+                    INSERT INTO domain_consultations
                         (id, patient_id, practitioner_id, consultation_date_utc, clinical_notes, diagnosis, legacy_consultation_id)
                     SELECT $id, p.id, $practitioner, $date, $notes, NULL, $legacyId
-                    FROM domain_patients p WHERE p.legacy_patient_id=$patientId;
+                    FROM domain_patients p WHERE p.legacy_patient_id=$patientId
+                    ON CONFLICT(legacy_consultation_id) DO UPDATE SET
+                        patient_id=excluded.patient_id,
+                        practitioner_id=excluded.practitioner_id,
+                        consultation_date_utc=excluded.consultation_date_utc,
+                        clinical_notes=excluded.clinical_notes;
                     """;
                 insert.Parameters.AddWithValue("$id", StableGuid($"legacy-consultation:{legacy.Id}").ToString("D"));
                 insert.Parameters.AddWithValue("$practitioner", StableGuid($"legacy-practitioner:{(string.IsNullOrWhiteSpace(legacy.Clinician) ? "unknown" : legacy.Clinician.Trim().ToUpperInvariant())}").ToString("D"));
@@ -115,6 +130,107 @@ public static class LegacyDomainDataMigration
         await transaction.CommitAsync(cancellationToken);
         return imported;
     }
+
+    private static async Task<int> ExportDomainOnlyPatientsAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        var patients = new List<DomainPatient>();
+        await using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = """
+                SELECT id, first_name, last_name, date_of_birth, sex, phone_number, created_at_utc
+                FROM domain_patients WHERE legacy_patient_id IS NULL ORDER BY rowid;
+                """;
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                patients.Add(new DomainPatient(reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                    reader.IsDBNull(3) ? "" : reader.GetString(3), reader.IsDBNull(4) ? "" : reader.GetString(4),
+                    reader.IsDBNull(5) ? "" : reader.GetString(5), reader.GetString(6)));
+        }
+
+        foreach (var patient in patients)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO patients(name, phone, birth_date, gender, notes, created_at)
+                VALUES($name, $phone, $birth, $gender, '', $created);
+                SELECT last_insert_rowid();
+                """;
+            insert.Parameters.AddWithValue("$name", $"{patient.FirstName} {patient.LastName}".Trim());
+            insert.Parameters.AddWithValue("$phone", patient.Phone);
+            insert.Parameters.AddWithValue("$birth", patient.BirthDate);
+            insert.Parameters.AddWithValue("$gender", patient.Sex);
+            insert.Parameters.AddWithValue("$created", patient.CreatedAt);
+            var legacyId = Convert.ToInt64(await insert.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
+
+            await using var update = connection.CreateCommand();
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE domain_patients SET legacy_patient_id=$legacyId WHERE id=$id;";
+            update.Parameters.AddWithValue("$legacyId", legacyId);
+            update.Parameters.AddWithValue("$id", patient.Id);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+        return patients.Count;
+    }
+
+    private static async Task<int> ExportDomainOnlyConsultationsAsync(SqliteConnection connection, SqliteTransaction transaction, CancellationToken cancellationToken)
+    {
+        var consultations = new List<DomainConsultation>();
+        await using (var read = connection.CreateCommand())
+        {
+            read.Transaction = transaction;
+            read.CommandText = """
+                SELECT c.id, c.patient_id, c.practitioner_id, c.consultation_date_utc, c.clinical_notes, c.diagnosis
+                FROM domain_consultations c
+                WHERE c.legacy_consultation_id IS NULL
+                ORDER BY c.rowid;
+                """;
+            await using var reader = await read.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                consultations.Add(new DomainConsultation(reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                    reader.GetString(3), reader.IsDBNull(4) ? "" : reader.GetString(4),
+                    reader.IsDBNull(5) ? "" : reader.GetString(5)));
+        }
+
+        foreach (var consultation in consultations)
+        {
+            await using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = """
+                INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary, created_at)
+                SELECT p.legacy_patient_id, legacy.name, $date, COALESCE(u.username, $practitioner),
+                       $summary, CURRENT_TIMESTAMP
+                FROM domain_patients p
+                JOIN patients legacy ON legacy.id=p.legacy_patient_id
+                LEFT JOIN hospital_users u ON u.id=$practitioner
+                WHERE p.id=$patientId AND p.legacy_patient_id IS NOT NULL;
+                SELECT last_insert_rowid();
+                """;
+            insert.Parameters.AddWithValue("$date", consultation.Date);
+            insert.Parameters.AddWithValue("$practitioner", consultation.PractitionerId);
+            insert.Parameters.AddWithValue("$summary", CombineNotes(consultation.Notes, consultation.Diagnosis));
+            insert.Parameters.AddWithValue("$patientId", consultation.PatientId);
+            var result = await insert.ExecuteScalarAsync(cancellationToken);
+            if (result is null || result is DBNull) continue;
+            var legacyId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+            await using var update = connection.CreateCommand();
+            update.Transaction = transaction;
+            update.CommandText = "UPDATE domain_consultations SET legacy_consultation_id=$legacyId WHERE id=$id;";
+            update.Parameters.AddWithValue("$legacyId", legacyId);
+            update.Parameters.AddWithValue("$id", consultation.Id);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+        return consultations.Count;
+    }
+
+    private static string CombineNotes(string notes, string diagnosis) =>
+        string.Join(Environment.NewLine, new[] { notes.Trim(), string.IsNullOrWhiteSpace(diagnosis) ? "" : $"Diagnostic : {diagnosis.Trim()}" }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    public static Guid StablePatientGuid(long legacyId) => StableGuid($"legacy-patient:{legacyId}");
+    public static Guid StableConsultationGuid(long legacyId) => StableGuid($"legacy-consultation:{legacyId}");
+    public static Guid StablePractitionerGuid(string clinician) =>
+        StableGuid($"legacy-practitioner:{(string.IsNullOrWhiteSpace(clinician) ? "unknown" : clinician.Trim().ToUpperInvariant())}");
 
     private static async Task<bool> TableExistsAsync(SqliteConnection connection, SqliteTransaction transaction, string table, CancellationToken cancellationToken)
     {
@@ -139,6 +255,8 @@ public static class LegacyDomainDataMigration
         return new Guid(hash.AsSpan(0, 16));
     }
 
+    private sealed record DomainPatient(string Id, string FirstName, string LastName, string BirthDate, string Sex, string Phone, string CreatedAt);
+    private sealed record DomainConsultation(string Id, string PatientId, string PractitionerId, string Date, string Notes, string Diagnosis);
     private sealed record LegacyPatient(long Id, string Name, string Phone, string BirthDate, string Gender, string CreatedAt);
     private sealed record LegacyConsultation(long Id, long? PatientId, string PatientName, string ConsultedAt, string Clinician, string Summary);
 }
