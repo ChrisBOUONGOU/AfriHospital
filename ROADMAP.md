@@ -52,7 +52,7 @@ Les cases cochées indiquent les fonctionnalités ajoutées au dépôt. La compi
 - [x] Ajouter un service applicatif de création de compte et de vérification des identifiants.
 - [x] Importer de façon idempotente les patients et consultations historiques vers les tables GUID, avec identifiants de correspondance, en préservant les tables sources.
 - [x] Unifier le stockage des patients et consultations : les dépôts métier écrivent dans les tables historiques partagées et réconcilient la projection GUID à l'initialisation/lecture.
-- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier plutôt que le SQL intégré à MainWindow (en cours : les écrans Patients et Consultations sont migrés ; les autres modules utilisent encore `HospitalDatabase`).
+- [ ] Refactoriser l'interface Avalonia pour utiliser directement les dépôts métier plutôt que le SQL intégré à MainWindow (en cours : les écrans Patients, Consultations et Rendez-vous sont migrés vers des dépôts dédiés ; Pharmacie, Facturation, Utilisateurs, Audit et Sauvegarde utilisent encore `HospitalDatabase`).
 - [x] Migrer les écrans Patients et Consultations vers `IPatientRepository` et `IConsultationRepository`, avec tests de conservation des notes et de lecture de l'historique.
 - [x] Créer un parcours de première configuration qui n'autorise le premier administrateur que si aucun compte n'existe.
 - [x] Ajouter un filtrage initial des menus selon le rôle.
