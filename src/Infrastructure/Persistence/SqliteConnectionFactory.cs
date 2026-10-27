@@ -84,6 +84,10 @@ public sealed class SqliteConnectionFactory
                 role TEXT NOT NULL,
                 is_active INTEGER NOT NULL DEFAULT 1
             );
+            CREATE TRIGGER IF NOT EXISTS trg_security_audit_no_update
+                BEFORE UPDATE ON security_audit_log BEGIN SELECT RAISE(ABORT, 'security audit log is append-only'); END;
+            CREATE TRIGGER IF NOT EXISTS trg_security_audit_no_delete
+                BEFORE DELETE ON security_audit_log BEGIN SELECT RAISE(ABORT, 'security audit log is append-only'); END;
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
