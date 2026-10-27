@@ -52,16 +52,26 @@ public partial class MainWindow : Window
         {
             await _connectionFactory.InitializeAsync();
             var firstSetup = await _authentication.CountUsersAsync() == 0;
-            var username = new TextBox { Watermark = "Nom d'utilisateur", MinWidth = 280, Padding = new Thickness(10) };
-            var password = new TextBox { Watermark = "Mot de passe", PasswordChar = '●', MinWidth = 280, Padding = new Thickness(10) };
-            var confirmation = new TextBox { Watermark = "Confirmer le mot de passe", PasswordChar = '●', MinWidth = 280, Padding = new Thickness(10), IsVisible = firstSetup };
+            var username = new TextBox { Watermark = UiText.T("Nom d'utilisateur"), MinWidth = 280, Padding = new Thickness(10) };
+            var password = new TextBox { Watermark = UiText.T("Mot de passe"), PasswordChar = '●', MinWidth = 280, Padding = new Thickness(10) };
+            var confirmation = new TextBox { Watermark = UiText.T("Confirmer le mot de passe"), PasswordChar = '●', MinWidth = 280, Padding = new Thickness(10), IsVisible = firstSetup };
+            var language = new ComboBox { ItemsSource = new[] { "Français", "English" }, SelectedIndex = UiText.IsEnglish ? 1 : 0, MinWidth = 120 };
+            language.SelectionChanged += async (_, _) =>
+            {
+                var nextLanguage = language.SelectedIndex == 1 ? "en" : "fr";
+                if (nextLanguage != UiText.Language)
+                {
+                    UiText.SetLanguage(nextLanguage);
+                    await ShowAuthenticationAsync();
+                }
+            };
             var message = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brush("#B91C1C") };
             var submit = ActionButton(firstSetup ? "Créer l'administrateur" : "Se connecter");
             var panel = new StackPanel { Spacing = 14, Width = 360, Children =
             {
-                new TextBlock { Text = "✚ AfriHospital", FontSize = 28, FontWeight = FontWeight.Bold, Foreground = Brush("#171717"), HorizontalAlignment = HorizontalAlignment.Center },
-                new TextBlock { Text = firstSetup ? "Première configuration — créez le compte administrateur." : "Connectez-vous pour accéder aux modules hospitaliers.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#4B5563") },
-                username, password, confirmation, submit, message
+                new TextBlock { Text = UiText.T("✚ AfriHospital"), FontSize = 28, FontWeight = FontWeight.Bold, Foreground = Brush("#171717"), HorizontalAlignment = HorizontalAlignment.Center },
+                new TextBlock { Text = firstSetup ? UiText.T("Première configuration — créez le compte administrateur.") : UiText.T("Connectez-vous pour accéder aux modules hospitaliers."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#4B5563") },
+                language, username, password, confirmation, submit, message
             }};
             submit.Click += async (_, _) =>
             {
@@ -72,7 +82,7 @@ public partial class MainWindow : Window
                     {
                         if (password.Text != confirmation.Text)
                         {
-                            message.Text = "Les mots de passe ne correspondent pas.";
+                            message.Text = UiText.T("Les mots de passe ne correspondent pas.");
                             return;
                         }
                         _currentUser = await _authentication.CreateInitialAdministratorAsync(username.Text ?? "", password.Text ?? "");
@@ -82,7 +92,7 @@ public partial class MainWindow : Window
                         _currentUser = await _authentication.AuthenticateAsync(username.Text ?? "", password.Text ?? "");
                         if (_currentUser is null)
                         {
-                            message.Text = "Identifiants incorrects ou compte désactivé.";
+                            message.Text = UiText.T("Identifiants incorrects ou compte désactivé.");
                             return;
                         }
                     }
@@ -107,7 +117,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            Content = new TextBlock { Text = "Impossible d'initialiser la connexion : " + ex.Message, Margin = new Thickness(24), TextWrapping = TextWrapping.Wrap };
+            Content = new TextBlock { Text = UiText.T("Impossible d'initialiser la connexion : ") + ex.Message, Margin = new Thickness(24), TextWrapping = TextWrapping.Wrap };
         }
     }
 
@@ -140,11 +150,11 @@ public partial class MainWindow : Window
                     Background = Brush("#A8E66B"), CornerRadius = new CornerRadius(10),
                     Padding = new Thickness(12), Child = new TextBlock
                     {
-                        Text = "✚  AfriHospital", FontSize = 20, FontWeight = FontWeight.Bold,
+                        Text = UiText.T("✚  AfriHospital"), FontSize = 20, FontWeight = FontWeight.Bold,
                         Foreground = Brush("#171717")
                     }
                 },
-                new TextBlock { Text = "GESTION HOSPITALIÈRE", FontSize = 10, Margin = new Thickness(4, 6), Foreground = Brush("#D1D5DB") }
+                new TextBlock { Text = UiText.T("GESTION HOSPITALIÈRE"), FontSize = 10, Margin = new Thickness(4, 6), Foreground = Brush("#D1D5DB") }
             }
         });
         if (CanAccess("Tableau de bord")) AddNav(nav, "Tableau de bord", async () => await ShowDashboardAsync());
@@ -156,17 +166,34 @@ public partial class MainWindow : Window
         if (CanAccess("Utilisateurs")) AddNav(nav, "Utilisateurs", async () => await ShowUsersAsync());
         if (CanAccess("Audit")) AddNav(nav, "Journal d'audit", async () => await ShowAuditAsync());
         if (CanAccess("Sauvegarde")) AddNav(nav, "Sauvegarde", async () => await ShowBackupAsync());
-        var logout = new Button { Content = "Se déconnecter", HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.Transparent, Foreground = Brushes.White, Padding = new Thickness(12, 11), CornerRadius = new CornerRadius(7) };
+        var logout = new Button { Content = UiText.T("Se déconnecter"), HorizontalContentAlignment = HorizontalAlignment.Left, Background = Brushes.Transparent, Foreground = Brushes.White, Padding = new Thickness(12, 11), CornerRadius = new CornerRadius(7) };
         logout.Click += (_, _) => Logout();
         nav.Children.Add(logout);
         nav.Children.Add(new Border { Height = 1, Background = Brush("#404040"), Margin = new Thickness(4, 18) });
         nav.Children.Add(new TextBlock
         {
-            Text = "Prototype local\nDonnées enregistrées sur cet appareil",
+            Text = UiText.T("Prototype local\nDonnées enregistrées sur cet appareil"),
             Foreground = Brush("#D1D5DB"), FontSize = 11, Margin = new Thickness(8), TextWrapping = TextWrapping.Wrap
         });
 
         var right = new StackPanel { Spacing = 18, Margin = new Thickness(28) };
+        var language = new ComboBox { ItemsSource = new[] { "Français", "English" }, SelectedIndex = UiText.IsEnglish ? 1 : 0, MinWidth = 120 };
+        language.SelectionChanged += async (_, _) =>
+        {
+            var nextLanguage = language.SelectedIndex == 1 ? "en" : "fr";
+            if (nextLanguage != UiText.Language)
+            {
+                UiText.SetLanguage(nextLanguage);
+                BuildShell();
+                await ShowDashboardAsync();
+            }
+        };
+        right.Children.Add(new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 8,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Children = { new TextBlock { Text = UiText.T("Langue") }, language }
+        });
         right.Children.Add(_pageTitle);
         right.Children.Add(_status);
         right.Children.Add(new Border { Height = 1, Background = Brush("#E5E7EB") });
@@ -188,7 +215,7 @@ public partial class MainWindow : Window
     {
         var button = new Button
         {
-            Content = label, HorizontalContentAlignment = HorizontalAlignment.Left,
+            Content = UiText.T(label), HorizontalContentAlignment = HorizontalAlignment.Left,
             Background = Brushes.Transparent, Foreground = Brushes.White,
             Padding = new Thickness(12, 11), CornerRadius = new CornerRadius(7)
         };
@@ -204,8 +231,8 @@ public partial class MainWindow : Window
 
     private void BeginPage(string title, string description)
     {
-        _viewModel.PageTitle = title;
-        _viewModel.StatusMessage = description;
+        _viewModel.PageTitle = UiText.T(title);
+        _viewModel.StatusMessage = UiText.T(description);
         _content.Children.Clear();
     }
 
@@ -224,19 +251,19 @@ public partial class MainWindow : Window
 
     private TextBlock Heading(string text) => new()
     {
-        Text = text, FontSize = 17, FontWeight = FontWeight.SemiBold,
+        Text = UiText.T(text), FontSize = 17, FontWeight = FontWeight.SemiBold,
         Foreground = Brush("#171717")
     };
 
     private TextBox Field(string watermark) => new()
     {
-        Watermark = watermark, MinWidth = 220, Padding = new Thickness(10),
+        Watermark = UiText.T(watermark), MinWidth = 220, Padding = new Thickness(10),
         HorizontalAlignment = HorizontalAlignment.Stretch
     };
 
     private Button ActionButton(string text, bool primary = true) => new()
     {
-        Content = text, Padding = new Thickness(14, 10),
+        Content = UiText.T(text), Padding = new Thickness(14, 10),
         Background = Brush(primary ? "#A8E66B" : "#FFD43B"),
         Foreground = Brush("#171717"), FontWeight = FontWeight.SemiBold,
         CornerRadius = new CornerRadius(7)
@@ -266,7 +293,7 @@ public partial class MainWindow : Window
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children =
         {
             Heading("Dernières opérations"), list,
-            new TextBlock { Text = "Le journal est local. Il ne remplace pas une stratégie de conservation, de sauvegarde et de protection contre la falsification.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#6B7280") }
+            new TextBlock { Text = UiText.T("Le journal est local. Il ne remplace pas une stratégie de conservation, de sauvegarde et de protection contre la falsification."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#6B7280") }
         }}));
     }
 
@@ -281,7 +308,7 @@ public partial class MainWindow : Window
         BeginPage("Utilisateurs", "Création de comptes et attribution de rôles. Utilisez des comptes nominatifs et des mots de passe uniques.");
         await _connectionFactory.InitializeAsync();
         var username = Field("Nom d'utilisateur");
-        var password = new TextBox { Watermark = "Mot de passe (12 caractères minimum)", PasswordChar = '●', MinWidth = 260, Padding = new Thickness(10) };
+        var password = new TextBox { Watermark = UiText.T("Mot de passe (12 caractères minimum)"), PasswordChar = '●', MinWidth = 260, Padding = new Thickness(10) };
         var role = new ComboBox { MinWidth = 260, ItemsSource = new[] { "Doctor", "Nurse", "Receptionist", "Pharmacist", "Billing" }, SelectedIndex = 0 };
         var list = new ListBox { MinHeight = 200 };
         async Task Refresh()
@@ -298,15 +325,15 @@ public partial class MainWindow : Window
                 return;
             }
             await _authentication.CreateUserAsync(username.Text.Trim(), password.Text, selectedRole, createdBy: _currentUser?.Username);
-            username.Text = "";
-            password.Text = "";
+            username.Text = UiText.T("");
+            password.Text = UiText.T("");
             await Refresh();
             SetStatus("Compte utilisateur créé.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
         {
             Heading("Créer un compte utilisateur"), username, password, role, save,
-            new TextBlock { Text = "Le mot de passe doit contenir au moins 12 caractères. Les comptes sont créés actifs.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#4B5563") }
+            new TextBlock { Text = UiText.T("Le mot de passe doit contenir au moins 12 caractères. Les comptes sont créés actifs."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#4B5563") }
         }}));
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Comptes enregistrés"), list } }));
         await Refresh();
@@ -327,10 +354,10 @@ public partial class MainWindow : Window
         AddMetric(grid, "Alertes stock", counts["low_stock"], 2, 1);
         _content.Children.Add(Card(new StackPanel { Spacing = 8, Children =
         {
-            new TextBlock { Text = "Bienvenue sur AfriHospital", FontSize = 22, FontWeight = FontWeight.Bold, Foreground = Brush("#17220F") },
-            new TextBlock { Text = "Gérez les informations administratives de votre établissement depuis une interface simple.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") },
+            new TextBlock { Text = UiText.T("Bienvenue sur AfriHospital"), FontSize = 22, FontWeight = FontWeight.Bold, Foreground = Brush("#17220F") },
+            new TextBlock { Text = UiText.T("Gérez les informations administratives de votre établissement depuis une interface simple."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") },
             new Border { Background = Brush("#FFF7D6"), CornerRadius = new CornerRadius(7), Padding = new Thickness(10),
-                Child = new TextBlock { Text = "Important : prototype non certifié. N’y saisissez pas de données médicales réelles avant validation de la sécurité et des sauvegardes.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } }
+                Child = new TextBlock { Text = UiText.T("Important : prototype non certifié. N’y saisissez pas de données médicales réelles avant validation de la sécurité et des sauvegardes."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } }
         }}));
         _content.Children.Add(grid);
     }
@@ -402,12 +429,12 @@ public partial class MainWindow : Window
             if (isUpdate) await _patientRepository.UpdateAsync(patient);
             else await _patientRepository.AddAsync(patient);
             await _database.WriteAuditAsync(isUpdate ? "PATIENT_UPDATED" : "PATIENT_CREATED", "patient", _currentUser?.Username);
-            selectedId = null; selectedNumber = ""; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = "";
+            selectedId = null; selectedNumber = ""; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = UiText.T("");
             list.SelectedItem = null;
             await Refresh(); SetStatus("Patient enregistré dans la base locale.");
         });
         var clear = ActionButton("Nouveau / Effacer", false);
-        clear.Click += async (_, _) => { selectedId = null; selectedNumber = ""; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = ""; list.SelectedItem = null; await Task.CompletedTask; };
+        clear.Click += async (_, _) => { selectedId = null; selectedNumber = ""; name.Text = phone.Text = birth.Text = gender.Text = notes.Text = UiText.T(""); list.SelectedItem = null; await Task.CompletedTask; };
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
         {
             Heading("Fiche patient"), name, phone, birth, gender, notes,
@@ -502,7 +529,7 @@ public partial class MainWindow : Window
             };
             await _appointmentRepository.AddAsync(appointment);
             await _database.WriteAuditAsync("APPOINTMENT_CREATED", "appointment", _currentUser?.Username);
-            selectedId = null; patients.SelectedItem = null; date.Text = reason.Text = ""; status.SelectedIndex = 0;
+            selectedId = null; patients.SelectedItem = null; date.Text = reason.Text = UiText.T(""); status.SelectedIndex = 0;
             await Refresh();
             SetStatus("Rendez-vous ajouté.");
         });
@@ -553,7 +580,7 @@ public partial class MainWindow : Window
         var clear = ActionButton("Nouveau / Effacer", false);
         clear.Click += (_, _) =>
         {
-            selectedId = null; patients.SelectedItem = null; date.Text = reason.Text = "";
+            selectedId = null; patients.SelectedItem = null; date.Text = reason.Text = UiText.T("");
             status.SelectedIndex = 0; list.SelectedItem = null;
         };
 
@@ -609,7 +636,7 @@ public partial class MainWindow : Window
                 ClinicalNotes = summary.Text.Trim()
             });
             await _database.WriteAuditAsync("CONSULTATION_CREATED", "consultation", _currentUser.Username);
-            patients.SelectedItem = null; date.Text = clinician.Text = summary.Text = ""; await Refresh(); SetStatus("Consultation enregistrée.");
+            patients.SelectedItem = null; date.Text = clinician.Text = summary.Text = UiText.T(""); await Refresh(); SetStatus("Consultation enregistrée.");
         });
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children = { Heading("Nouvelle consultation"), patients, date, clinician, summary, save } }));
         _content.Children.Add(Card(new StackPanel { Spacing = 10, Children = { Heading("Historique des consultations"), list } }));
@@ -699,7 +726,7 @@ public partial class MainWindow : Window
             var newId = await _database.AddMedicineAsync(name.Text.Trim(), initialQuantity,
                 string.IsNullOrWhiteSpace(unit.Text) ? "unité" : unit.Text.Trim(), sellPrice, min);
             await _database.WriteAuditAsync("MEDICINE_CREATED", "medicine", _currentUser?.Username);
-            name.Text = quantity.Text = threshold.Text = unit.Text = price.Text = "";
+            name.Text = quantity.Text = threshold.Text = unit.Text = price.Text = UiText.T("");
             await RefreshMedicines(newId);
             SetStatus(initialQuantity > 0
                 ? "Médicament ajouté. Le stock initial a été conservé dans un lot historique sans date de péremption connue."
@@ -744,8 +771,8 @@ public partial class MainWindow : Window
 
             await _database.RecordStockMovementAsync(selected.Id, inbound, movedQuantity, batch, expiryDate,
                 supplierName, cost, batchId, note.Text?.Trim() ?? "", _currentUser?.Username);
-            movementQuantity.Text = note.Text = "";
-            batchNumber.Text = expiry.Text = supplier.Text = unitCost.Text = "";
+            movementQuantity.Text = note.Text = UiText.T("");
+            batchNumber.Text = expiry.Text = supplier.Text = unitCost.Text = UiText.T("");
             await RefreshMedicines(selected.Id);
             SetStatus(inbound ? "Entrée de stock enregistrée." : "Sortie de stock enregistrée.");
         });
@@ -753,7 +780,7 @@ public partial class MainWindow : Window
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
         {
             Heading("Ajouter un médicament"), name, quantity, threshold, unit, price, create,
-            new TextBlock { Text = "Un stock initial déjà connu est conservé, mais sa date de péremption reste inconnue jusqu'à un inventaire physique.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#6B7280") }
+            new TextBlock { Text = UiText.T("Un stock initial déjà connu est conservé, mais sa date de péremption reste inconnue jusqu'à un inventaire physique."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#6B7280") }
         }}));
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
         {
@@ -776,13 +803,13 @@ public partial class MainWindow : Window
 
         BeginPage("Sauvegarde locale", "Créez une copie ou restaurez une sauvegarde SQLite. Une sauvegarde contient des données sensibles.");
         await _database.InitializeAsync();
-        var folder = new TextBlock { Text = "Les sauvegardes sont créées dans Documents/AfriHospital-Backups.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") };
+        var folder = new TextBlock { Text = UiText.T("Les sauvegardes sont créées dans Documents/AfriHospital-Backups."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") };
         var save = ActionButton("Créer une sauvegarde maintenant");
         save.Click += async (_, _) => await SafeRunAsync(async () =>
         {
             var path = await _database.CreateBackupAsync();
             await _database.WriteAuditAsync("DATABASE_BACKUP_CREATED", "database", _currentUser?.Username, "Local SQLite backup created.");
-            _content.Children.Add(Card(new TextBlock { Text = "Sauvegarde créée : " + path, TextWrapping = TextWrapping.Wrap, Foreground = Brush("#166534") }));
+            _content.Children.Add(Card(new TextBlock { Text = UiText.T("Sauvegarde créée : ") + path, TextWrapping = TextWrapping.Wrap, Foreground = Brush("#166534") }));
             SetStatus("Sauvegarde créée. Protégez ce fichier contre tout accès non autorisé.");
         });
 
@@ -806,13 +833,13 @@ public partial class MainWindow : Window
             Heading("Créer une sauvegarde"),
             folder,
             new Border { Background = Brush("#FFF7D6"), CornerRadius = new CornerRadius(8), Padding = new Thickness(12),
-                Child = new TextBlock { Text = "Les sauvegardes ne sont pas chiffrées. Ne les transmettez pas et n'utilisez pas de vrais dossiers médicaux avant la mise en place des protections nécessaires.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } },
+                Child = new TextBlock { Text = UiText.T("Les sauvegardes ne sont pas chiffrées. Ne les transmettez pas et n'utilisez pas de vrais dossiers médicaux avant la mise en place des protections nécessaires."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#5B4300") } },
             save
         }}));
         _content.Children.Add(Card(new StackPanel { Spacing = 12, Children =
         {
             Heading("Restaurer une sauvegarde"),
-            new TextBlock { Text = "La base choisie sera vérifiée avant restauration. L'application créera d'abord une copie de sécurité de la base actuelle.", TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") },
+            new TextBlock { Text = UiText.T("La base choisie sera vérifiée avant restauration. L'application créera d'abord une copie de sécurité de la base actuelle."), TextWrapping = TextWrapping.Wrap, Foreground = Brush("#374151") },
             restorePath, restore
         }}));
     }
@@ -863,7 +890,7 @@ public partial class MainWindow : Window
             { SetStatus("Le nom du patient ou la description est trop long.", true); return; }
             await _database.ExecuteAsync("INSERT INTO invoices(patient_name, description, amount, currency, status) VALUES($p,$d,$a,$c,'À payer')", ("$p", patient.Text.Trim()), ("$d", description.Text ?? ""), ("$a", a), ("$c", currencyCode));
             await _database.WriteAuditAsync("INVOICE_CREATED", "invoice", _currentUser?.Username);
-            patient.Text = description.Text = amount.Text = currency.Text = "";
+            patient.Text = description.Text = amount.Text = currency.Text = UiText.T("");
             await Refresh();
             SetStatus("Facture créée.");
         });
@@ -877,7 +904,7 @@ public partial class MainWindow : Window
             { SetStatus("Sélectionnez une facture, un montant positif et un moyen de paiement.", true); return; }
             var paymentId = await _database.RecordPaymentAsync(selected.Id, paid, method, _currentUser?.Username);
             invoiceChoice.SelectedItem = null;
-            paymentAmount.Text = "";
+            paymentAmount.Text = UiText.T("");
             await Refresh();
             try
             {
@@ -909,7 +936,7 @@ public partial class MainWindow : Window
             if (refundReason.Text.Trim().Length > 250)
             { SetStatus("Le motif du remboursement ne doit pas dépasser 250 caractères.", true); return; }
             var refundId = await _database.RecordRefundAsync(selected.PaymentId, refunded, method, refundReason.Text.Trim(), _currentUser?.Username);
-            refundAmount.Text = refundReason.Text = "";
+            refundAmount.Text = refundReason.Text = UiText.T("");
             await Refresh();
             try
             {
