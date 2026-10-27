@@ -882,6 +882,7 @@ public partial class MainWindow : Window
             try
             {
                 var receiptPath = await _database.CreateReceiptAsync(paymentId);
+                await _database.WriteAuditAsync("PAYMENT_RECEIPT_EXPORTED", "receipt", _currentUser?.Username, "Payment receipt generated; no clinical details.");
                 try
                 {
                     var printablePath = await _database.CreatePrintableReceiptAsync(paymentId);
@@ -913,6 +914,7 @@ public partial class MainWindow : Window
             try
             {
                 var receiptPath = await _database.CreateRefundReceiptAsync(refundId);
+                await _database.WriteAuditAsync("REFUND_RECEIPT_EXPORTED", "receipt", _currentUser?.Username, "Refund receipt generated; no clinical details.");
                 try
                 {
                     var printablePath = await _database.CreatePrintableRefundReceiptAsync(refundId);
