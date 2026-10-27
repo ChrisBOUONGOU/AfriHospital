@@ -93,14 +93,15 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
 
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary, created_at)
-            SELECT p.legacy_patient_id, legacy.name, $date, $clinician, $summary, CURRENT_TIMESTAMP
+            INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, practitioner_id, summary, created_at)
+            SELECT p.legacy_patient_id, legacy.name, $date, $clinician, $practitionerId, $summary, CURRENT_TIMESTAMP
             FROM domain_patients p
             JOIN patients legacy ON legacy.id=p.legacy_patient_id
             WHERE p.id=$patientId AND p.legacy_patient_id IS NOT NULL;
             """;
         command.Parameters.AddWithValue("$date", consultation.ConsultationDateUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$clinician", clinician);
+        command.Parameters.AddWithValue("$practitionerId", consultation.PractitionerId.ToString("D"));
         command.Parameters.AddWithValue("$summary", CombineNotes(consultation.ClinicalNotes, consultation.Diagnosis));
         command.Parameters.AddWithValue("$patientId", consultation.PatientId.ToString("D"));
         if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
