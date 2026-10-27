@@ -146,7 +146,7 @@ Le fonctionnement hors ligne avec synchronisation entre plusieurs appareils néc
 
 Documentation : [Avalonia UI](https://docs.avaloniaui.net/docs/get-started).
 
-Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite de tests xUnit est présente et exécutée dans GitHub Actions ; le dernier résultat vérifié pour le code était une compilation réussie et 8 tests réussis.
+Le dépôt utilise encore un seul fichier projet, AfriHospital.csproj. Une suite de tests xUnit est présente et exécutée dans GitHub Actions ; le dernier résultat vérifié pour le code était une compilation réussie et 11 tests réussis.
 
 ### 1. Cloner le dépôt
 
@@ -221,7 +221,7 @@ AfriHospital ne doit pas être considéré comme un logiciel prêt pour une util
 - [x] Créer et afficher des factures simples avec devise configurable.
 - [x] Enregistrer des paiements partiels ou complets et calculer le solde restant.
 - [x] Générer un reçu texte local après chaque paiement enregistré.
-- [ ] Ajouter les remboursements et des reçus imprimables.
+- [x] Enregistrer les remboursements partiels ou complets, recalculer le solde et le statut de facture, et générer des reçus texte et HTML imprimables pour paiements et remboursements.
 - [ ] Valider les règles fiscales et monétaires du pays cible.
 
 ### Phase 4 — Sécurité et déploiement
@@ -475,7 +475,7 @@ AfriHospital must not be considered production-ready for clinical use until the 
 - [x] Create and display basic invoices with a configurable currency.
 - [x] Record partial/full payments and calculate outstanding balances.
 - [x] Generate a local text receipt after each recorded payment.
-- [ ] Add refunds and printable/formatted receipts.
+- [x] Record partial/full refunds, recalculate invoice balances and statuses, and generate text plus print-ready HTML receipts for payments and refunds.
 - [ ] Validate tax and currency rules for the target country.
 
 ### Phase 4 — Security and Deployment
