@@ -14,7 +14,7 @@ public static class LegacyDomainDataMigration
     public static async Task<int> ImportAsync(SqliteConnection connection, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(connection);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         var imported = 0;
 
         var patientsExist = await TableExistsAsync(connection, transaction, "patients", cancellationToken);
@@ -27,7 +27,7 @@ public static class LegacyDomainDataMigration
         var legacyPatients = new List<LegacyPatient>();
         await using (var read = connection.CreateCommand())
         {
-            read.Transaction = (SqliteTransaction)transaction;
+            read.Transaction = transaction;
             read.CommandText = "SELECT id, name, phone, birth_date, gender, created_at FROM patients ORDER BY id;";
             await using var reader = await read.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -49,7 +49,7 @@ public static class LegacyDomainDataMigration
                 : DateTime.UnixEpoch.ToString("O", CultureInfo.InvariantCulture);
 
             await using var insert = connection.CreateCommand();
-            insert.Transaction = (SqliteTransaction)transaction;
+            insert.Transaction = transaction;
             insert.CommandText = """
                 INSERT OR IGNORE INTO domain_patients
                     (id, patient_number, first_name, last_name, date_of_birth, sex, phone_number, created_at_utc, legacy_patient_id)
