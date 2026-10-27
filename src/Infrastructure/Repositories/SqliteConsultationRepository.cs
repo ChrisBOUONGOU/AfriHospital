@@ -6,13 +6,19 @@ using System.Globalization;
 
 namespace AfriHospital.src.Infrastructure.Repositories;
 
+/// <summary>
+/// Domain-facing consultation repository backed by the consultations table used by the existing UI.
+/// </summary>
 public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory) : IConsultationRepository
 {
     public async Task<IReadOnlyList<Consultation>> GetForPatientAsync(Guid patientId, CancellationToken cancellationToken = default)
     {
-        var items = new List<Consultation>();
+        await factory.InitializeAsync(cancellationToken);
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
+
+        var items = new List<Consultation>();
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, patient_id, practitioner_id, consultation_date_utc, clinical_notes, diagnosis
@@ -24,7 +30,8 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
         while (await reader.ReadAsync(cancellationToken))
             items.Add(new Consultation
             {
-                Id = Guid.Parse(reader.GetString(0)), PatientId = Guid.Parse(reader.GetString(1)),
+                Id = Guid.Parse(reader.GetString(0)),
+                PatientId = Guid.Parse(reader.GetString(1)),
                 PractitionerId = Guid.Parse(reader.GetString(2)),
                 ConsultationDateUtc = DateTime.Parse(reader.GetString(3), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                 ClinicalNotes = reader.IsDBNull(4) ? null : reader.GetString(4),
@@ -36,26 +43,53 @@ public sealed class SqliteConsultationRepository(SqliteConnectionFactory factory
     public async Task AddAsync(Consultation consultation, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(consultation);
-        if (consultation.Id == Guid.Empty) consultation.Id = Guid.NewGuid();
         if (consultation.PatientId == Guid.Empty || consultation.PractitionerId == Guid.Empty)
             throw new ArgumentException("Le patient et le professionnel doivent être identifiés.");
         if (consultation.ConsultationDateUtc == default)
             throw new ArgumentException("La date de consultation est obligatoire.");
 
+        await factory.InitializeAsync(cancellationToken);
         await using var connection = factory.CreateConnection();
         await connection.OpenAsync(cancellationToken);
+        await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
+
+        await using var practitioner = connection.CreateCommand();
+        practitioner.CommandText = "SELECT username FROM hospital_users WHERE id=$id LIMIT 1;";
+        practitioner.Parameters.AddWithValue("$id", consultation.PractitionerId.ToString("D"));
+        var clinician = await practitioner.ExecuteScalarAsync(cancellationToken) as string
+            ?? consultation.PractitionerId.ToString("D");
+
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            INSERT INTO domain_consultations
-                (id, patient_id, practitioner_id, consultation_date_utc, clinical_notes, diagnosis)
-            VALUES ($id, $patient, $practitioner, $date, $notes, $diagnosis);
+            INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary, created_at)
+            SELECT p.legacy_patient_id, legacy.name, $date, $clinician, $summary, CURRENT_TIMESTAMP
+            FROM domain_patients p
+            JOIN patients legacy ON legacy.id=p.legacy_patient_id
+            WHERE p.id=$patientId AND p.legacy_patient_id IS NOT NULL;
+            SELECT last_insert_rowid();
             """;
-        command.Parameters.AddWithValue("$id", consultation.Id.ToString("D"));
-        command.Parameters.AddWithValue("$patient", consultation.PatientId.ToString("D"));
-        command.Parameters.AddWithValue("$practitioner", consultation.PractitionerId.ToString("D"));
-        command.Parameters.AddWithValue("$date", consultation.ConsultationDateUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$notes", (object?)consultation.ClinicalNotes ?? DBNull.Value);
-        command.Parameters.AddWithValue("$diagnosis", (object?)consultation.Diagnosis ?? DBNull.Value);
-        await command.ExecuteNonQueryAsync(cancellationToken);
+        command.Parameters.AddWithValue("$date", consultation.ConsultationDateUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$clinician", clinician);
+        command.Parameters.AddWithValue("$summary", CombineNotes(consultation.ClinicalNotes, consultation.Diagnosis));
+        command.Parameters.AddWithValue("$patientId", consultation.PatientId.ToString("D"));
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        if (result is null || result is DBNull)
+            throw new KeyNotFoundException("Le patient lié à cette consultation est introuvable.");
+        var legacyId = Convert.ToInt64(result, CultureInfo.InvariantCulture);
+        await LegacyDomainDataMigration.ImportAsync(connection, cancellationToken);
+        await using var lookup = connection.CreateCommand();
+        lookup.CommandText = "SELECT id FROM domain_consultations WHERE legacy_consultation_id=$legacyId;";
+        lookup.Parameters.AddWithValue("$legacyId", legacyId);
+        var id = await lookup.ExecuteScalarAsync(cancellationToken) as string;
+        if (string.IsNullOrWhiteSpace(id))
+            throw new InvalidOperationException("La consultation a été enregistrée, mais son identifiant métier n'a pas pu être créé.");
+        consultation.Id = Guid.Parse(id);
     }
+
+    private static string CombineNotes(string? notes, string? diagnosis) =>
+        string.Join(Environment.NewLine, new[]
+        {
+            notes?.Trim() ?? "",
+            string.IsNullOrWhiteSpace(diagnosis) ? "" : $"Diagnostic : {diagnosis.Trim()}"
+        }.Where(s => !string.IsNullOrWhiteSpace(s)));
 }
