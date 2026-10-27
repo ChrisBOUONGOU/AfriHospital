@@ -87,7 +87,7 @@ public static class LegacyDomainDataMigration
             {
                 read.Transaction = (SqliteTransaction)transaction;
                 read.CommandText = """
-                    SELECT id, patient_id, patient_name, consulted_at, clinician, summary
+                    SELECT id, patient_id, patient_name, consulted_at, clinician, summary, practitioner_id
                     FROM consultations ORDER BY id;
                     """;
                 await using var reader = await read.ExecuteReaderAsync(cancellationToken);
@@ -97,7 +97,8 @@ public static class LegacyDomainDataMigration
                         reader.IsDBNull(2) ? "" : reader.GetString(2),
                         reader.IsDBNull(3) ? "" : reader.GetString(3),
                         reader.IsDBNull(4) ? "" : reader.GetString(4),
-                        reader.IsDBNull(5) ? "" : reader.GetString(5)));
+                        reader.IsDBNull(5) ? "" : reader.GetString(5),
+                        reader.IsDBNull(6) ? null : reader.GetString(6)));
             }
 
             foreach (var legacy in legacyConsultations)
@@ -107,7 +108,9 @@ public static class LegacyDomainDataMigration
                         DateTimeStyles.AssumeLocal, out var consultationDate))
                     continue;
 
-                var practitionerId = await ResolvePractitionerGuidAsync(connection, transaction, legacy.Clinician, cancellationToken);
+                var practitionerId = Guid.TryParse(legacy.PractitionerId, out var storedPractitionerId)
+                    ? storedPractitionerId
+                    : await ResolvePractitionerGuidAsync(connection, transaction, legacy.Clinician, cancellationToken);
                 await using var update = connection.CreateCommand();
                 update.Transaction = transaction;
                 update.CommandText = """
@@ -231,9 +234,9 @@ public static class LegacyDomainDataMigration
             await using var insert = connection.CreateCommand();
             insert.Transaction = transaction;
             insert.CommandText = """
-                INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, summary, created_at)
+                INSERT INTO consultations(patient_id, patient_name, consulted_at, clinician, practitioner_id, summary, created_at)
                 SELECT p.legacy_patient_id, legacy.name, $date, COALESCE(u.username, $practitioner),
-                       $summary, CURRENT_TIMESTAMP
+                       $practitioner, $summary, CURRENT_TIMESTAMP
                 FROM domain_patients p
                 JOIN patients legacy ON legacy.id=p.legacy_patient_id
                 LEFT JOIN hospital_users u ON u.id=$practitioner
@@ -308,5 +311,5 @@ public static class LegacyDomainDataMigration
     private sealed record DomainPatient(string Id, string PatientNumber, string FirstName, string LastName, string BirthDate, string Sex, string Phone, string CreatedAt);
     private sealed record DomainConsultation(string Id, string PatientId, string PractitionerId, string Date, string Notes, string Diagnosis);
     private sealed record LegacyPatient(long Id, string Name, string PatientNumber, string Phone, string BirthDate, string Gender, string CreatedAt);
-    private sealed record LegacyConsultation(long Id, long? PatientId, string PatientName, string ConsultedAt, string Clinician, string Summary);
+    private sealed record LegacyConsultation(long Id, long? PatientId, string PatientName, string ConsultedAt, string Clinician, string Summary, string? PractitionerId);
 }
